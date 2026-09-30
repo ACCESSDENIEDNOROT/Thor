@@ -118,7 +118,7 @@ maxTime = 2.5,
 velFactor = 28,
 holdThreshold = 50,
 holdTimeFar = 0.6,
-holdTimeNear = 0.2,
+holdTimeNear = 0.25,
 maxHoldTime = 0.7,
 matchRotation = true,
 }
@@ -1191,7 +1191,9 @@ local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
-if not S.walkflingActive then startWalkfling() wait(0.05) end
+if not S.walkflingActive then startWalkfling() end
+-- Pequeña espera para que cargue el fling/walkfling (sin bloquear CFrame)
+wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -2541,7 +2543,7 @@ local ABUSE_COMMANDS = {
 {"predictmax n", "Max predict cap (2.5)"},
 {"predicthold n", "Hold threshold in studs (50)"},
 {"predictholdfar n", "Hold time when far (0.6s)"},
-{"predictholdnear n", "Hold time when near (0.2s)"},
+{"predictholdnear n", "Hold time when near (0.25s)"},
 {"predictholdmax n", "Max hold cap (0.7s)"},
 {"predictrot", "Toggle rotation matching"},
 {"predictinfo", "Show predict settings"},
