@@ -1109,6 +1109,8 @@ else
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
 end
 end
+-- Pequeña espera antes del TP para dejar que el fling cargue
+wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -2527,6 +2529,7 @@ local COMMAND_INFO = {
 {"antilag / boostfps", "Reduce graphics"},
 {"abuse / unabuse", "Abuse mode"},
 {"playercount", "Toggle join alerts"},
+{"reset", "Kill your character"},
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
@@ -2535,6 +2538,7 @@ local ABUSE_COMMANDS = {
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
+{"untogglewalkfling", "Unbind walkfling key"},
 {"predict n", "Base predict time (0.5)"},
 {"predictmulti n", "User predict multiplier (1.2)"},
 {"predictvel", "Toggle velocity-based predict"},
@@ -2686,8 +2690,10 @@ local cmdHints = {
 {p="^togglefreecam%s+(%S+)",h=function(m) return "Bind Freecam toggle: "..m:upper() end},
 {p="^togglefly%s+(%S+)",h=function(m) return "Bind Fly toggle: "..m:upper() end},
 {p="^togglewalkfling%s+(%S+)",h=function(m) return "Bind Walkfling toggle: "..m:upper() end},
+{p="^untogglewalkfling%s*$",h=function() return "Unbind Walkfling toggle" end},
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
+{p="^reset%s*$",h=function() return "Kill your character" end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
@@ -2779,6 +2785,7 @@ elseif cmd == "togglefly" then
 if arg1 then setToggleFlyKey(arg1) else setToggleFlyKey(nil) end
 elseif cmd == "togglewalkfling" then
 if arg1 then setToggleWalkflingKey(arg1) else setToggleWalkflingKey(nil) end
+elseif cmd == "untogglewalkfling" then setToggleWalkflingKey(nil)
 elseif cmd == "untogglefly" then setToggleFlyKey(nil)
 elseif cmd == "untogglefc" then setToggleFCKey(nil)
 elseif cmd == "untoggleesp" then setToggleESPKey(nil)
@@ -2788,6 +2795,15 @@ elseif cmd == "untoggleaura" then setToggleAuraKey(nil)
 elseif cmd == "togglesafefly" then
 if arg1 then setToggleSafeFlyKey(arg1) else setToggleSafeFlyKey(nil) end
 elseif cmd == "untogglesafefly" then setToggleSafeFlyKey(nil)
+elseif cmd == "reset" then
+local c = lp.Character
+if c then
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then
+pcall(function() h.Health = -10 end)
+showNotify("Reset", C.SUCCESS)
+end
+end
 elseif cmd == "predict" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
