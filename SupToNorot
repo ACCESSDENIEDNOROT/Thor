@@ -1,5 +1,5 @@
 local VERSION = "2.2.5"
-local HUB_NAME = "NotRot Hub V" .. VERSION
+local HUB_NAME = "SUPRA HUB V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -114,17 +114,17 @@ userMultiplier = 1.2,
 velocityScale = true,
 distanceScale = true,
 gravityComp = true,
-maxTime = 1.8,
-velFactor = 30,
+maxTime = 2.5,
+velFactor = 28,
 holdThreshold = 50,
-holdTimeFar = 0.7,
-holdTimeNear = 0.3,
-maxHoldTime = 1.0,
+holdTimeFar = 1.5,
+holdTimeNear = 0.5,
+matchRotation = true,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
 PARENT.DisplayOrder = 2147483647
-PARENT.Name = "NotRotHubV" .. VERSION
+PARENT.Name = "SupraHubV" .. VERSION
 if gethui then
 PARENT.Parent = gethui()
 elseif syn and syn.protect_gui then
@@ -189,7 +189,7 @@ countLabel.TextStrokeTransparency = 0
 countLabel.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 countLabel.Parent = playerCountGui
 local notifGui = Instance.new("ScreenGui")
-notifGui.Name = "NR_Notify_" .. math.random(100000, 999999)
+notifGui.Name = "SA_Notify_" .. math.random(100000, 999999)
 notifGui.ResetOnSpawn = false
 notifGui.IgnoreGuiInset = true
 notifGui.DisplayOrder = 999997
@@ -340,7 +340,7 @@ espLoops[plr.Name]:Disconnect()
 espLoops[plr.Name] = nil
 end
 for _, v in pairs(PARENT:GetChildren()) do
-if v.Name == plr.Name .. "_NR_ESP" then v:Destroy() end
+if v.Name == plr.Name .. "_SUPRA_ESP" then v:Destroy() end
 end
 end
 local function makeESP(plr)
@@ -377,7 +377,7 @@ espColor = Color3.new(1, 1, 1); hpFillColor = Color3.fromRGB(80, 220, 80)
 end
 local currentAlpha = S.espAlpha
 local sg = Instance.new("ScreenGui")
-sg.Name = plr.Name .. "_NR_ESP"
+sg.Name = plr.Name .. "_SUPRA_ESP"
 sg.ResetOnSpawn = false
 sg.IgnoreGuiInset = true
 sg.DisplayOrder = 999
@@ -573,7 +573,7 @@ end
 end
 local function applyESPTransparency()
 for _, sg in pairs(PARENT:GetChildren()) do
-if sg:IsA("ScreenGui") and sg.Name:find("_NR_ESP$") then
+if sg:IsA("ScreenGui") and sg.Name:find("_SUPRA_ESP$") then
 for _, child in pairs(sg:GetDescendants()) do
 if child:IsA("Frame") then
 if child.Name == "" then
@@ -812,7 +812,7 @@ if not S.fcRunning then return end
 S.fcRunning = false
 disableFreecamClickThrough()
 FCInput.StopCapture()
-RunService:UnbindFromRenderStep("NotRotFreecam")
+RunService:UnbindFromRenderStep("SupraFreecam")
 PlayerState.Pop()
 notifSet("freecam", "Freecam OFF", false)
 end
@@ -822,7 +822,7 @@ if S.viewing then stopView() end
 S.cameraFov = Camera.FieldOfView
 velSpring:Reset(Vector3.new()); panSpring:Reset(Vector2.new())
 PlayerState.Push()
-RunService:BindToRenderStep("NotRotFreecam", Enum.RenderPriority.Camera.Value, StepFreecam)
+RunService:BindToRenderStep("SupraFreecam", Enum.RenderPriority.Camera.Value, StepFreecam)
 FCInput.StartCapture()
 S.fcRunning = true
 enableFreecamClickThrough()
@@ -969,31 +969,32 @@ local velMag = vel.Magnitude
 local t = overrideTime or PredictS.baseTime
 local targetCF = targetRoot.CFrame
 if velMag < 0.5 then
-return targetRoot.Position, targetCF
+return targetRoot.Position, targetCF, 0
 end
 if PredictS.velocityScale then
-local velBonus = math.clamp(velMag / PredictS.velFactor, 0, 1.8)
+local velBonus = math.clamp(velMag / PredictS.velFactor, 0, 2.0)
 t = t * (1 + velBonus)
 end
 local myChar = lp.Character
 local myRoot = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Torso") or myChar:FindFirstChild("UpperTorso"))
 local dist = 0
-if PredictS.distanceScale and myRoot then
+if myRoot then
 dist = (targetRoot.Position - myRoot.Position).Magnitude
-if dist > 20 then
-local distBonus = math.clamp((dist - 20) / 100, 0, 1.5)
-t = t * (1 + distBonus)
 end
+if PredictS.distanceScale and dist > 20 then
+local distBonus = math.clamp((dist - 20) / 90, 0, 1.6)
+t = t * (1 + distBonus)
 end
 t = t * PredictS.userMultiplier
 t = math.min(t, PredictS.maxTime)
 local predicted = targetRoot.Position + vel * t
 if PredictS.gravityComp and vel.Y < 0 then
 local gravityDrop = 0.5 * workspace.Gravity * t * t
-predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.4, 8), 0)
+predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.45, 9), 0)
 end
 return predicted, targetCF, dist
 end
+-- === WALKFLING ===
 local function killWalkfling()
 if S.walkflingThread then
 pcall(function() S.walkflingThread:Disconnect() end)
@@ -1092,17 +1093,21 @@ local hum = char:FindFirstChildOfClass("Humanoid")
 if not hum then return false end
 local targetChar = target.Character
 if not targetChar then return false end
-local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("UpperTorso")
+local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
-notifTemp("fling", "Fling", 1.2)
+notifTemp("fling", "Fling", 1.0)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
-local targetLook = targetCF.LookVector
-local targetRot = targetCF - targetCF.Position
-local flingPos = predictedPos + Vector3.new(0, 3, 0)
-pcall(function() root.CFrame = CFrame.new(flingPos) * targetRot end)
+local targetRot = targetCF and targetCF - targetCF.Position or nil
+if targetRoot and targetRoot.Parent then
+if PredictS.matchRotation and targetRot then
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
+else
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
+end
+end
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1113,12 +1118,12 @@ BG.P = 9e4
 BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
 BG.CFrame = torso.CFrame
 BG.Parent = torso
-Debris:AddItem(BG, 6)
+Debris:AddItem(BG, 5)
 local BV = Instance.new("BodyVelocity")
 BV.Velocity = Vector3.new(0, -3.75, 0)
 BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 BV.Parent = torso
-Debris:AddItem(BV, 6)
+Debris:AddItem(BV, 5)
 local conn2 = RunService.Heartbeat:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1142,13 +1147,12 @@ RunService.Stepped:Wait()
 if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
 end)
 if targetRoot and targetRoot.Parent then
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 5.9, 0)) * targetRot end)
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
 wait(0.1)
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) * targetRot end)
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
 wait(0.1)
 end
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-holdTime = math.clamp(holdTime, 0.1, PredictS.maxHoldTime)
 wait(holdTime)
 pcall(function() if holdConn then holdConn:Disconnect() end end)
 pcall(function() conn1:Disconnect() end)
@@ -1176,15 +1180,14 @@ local hum = char:FindFirstChildOfClass("Humanoid")
 if not hum then return false end
 local targetChar = target.Character
 if not targetChar then return false end
-local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Torso") or targetChar:FindFirstChild("UpperTorso")
+local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
-notifTemp("fling2", "Fling2", 1.5)
+notifTemp("fling2", "Fling2", 1.2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
-local targetLook = targetCF.LookVector
-local targetRot = targetCF - targetCF.Position
+local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() wait(0.05) end
 local conn1 = RunService.Stepped:Connect(function()
@@ -1203,9 +1206,12 @@ RunService.RenderStepped:Wait()
 if char and char.Parent and root and root.Parent then root.Velocity = vel end
 RunService.Stepped:Wait()
 if char and char.Parent and root and root.Parent then root.Velocity = vel + Vector3.new(0, movel, 0) end
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
+if PredictS.matchRotation and targetRot then
+root.CFrame = CFrame.new(predictedPos) * targetRot
+else
+root.CFrame = CFrame.new(predictedPos)
+end
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-holdTime = math.clamp(holdTime, 0.1, PredictS.maxHoldTime)
 wait(holdTime)
 targetRoot.Anchored = savedTargetAnchored
 targetRoot.CFrame = savedTargetPosition
@@ -1720,7 +1726,7 @@ end
 local function createNpcEsp(npc)
 if npcEspBoxes[npc] then return end
 local sg = Instance.new("ScreenGui")
-sg.Name = npc.Name .. "_NR_NPC_ESP"
+sg.Name = npc.Name .. "_NPC_ESP"
 sg.ResetOnSpawn = false
 sg.IgnoreGuiInset = true
 sg.DisplayOrder = 998
@@ -2519,21 +2525,21 @@ local COMMAND_INFO = {
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling with adaptive predict"},
-{"fling2 [player]", "Fling walkfling + predict"},
+{"fling [player]", "Fling with adaptive predict + hold"},
+{"fling2 [player]", "Fling walkfling + adaptive predict"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
 {"predict n", "Base predict time (0.5)"},
-{"predictmulti n", "User multiplier (1.2)"},
+{"predictmulti n", "User predict multiplier (1.2)"},
 {"predictvel", "Toggle velocity-based predict"},
 {"predictscale", "Toggle distance-based predict"},
 {"predictgravity", "Toggle gravity compensation"},
-{"predictmax n", "Max predict cap (1.8)"},
-{"predicthold n", "Hold threshold (50 studs)"},
-{"predictholdfar n", "Hold far time (0.7s)"},
-{"predictholdnear n", "Hold near time (0.3s)"},
-{"predictholdmax n", "Max hold cap (1.0s)"},
+{"predictmax n", "Max predict cap (2.5)"},
+{"predicthold n", "Hold threshold in studs (50)"},
+{"predictholdfar n", "Hold time when far (1.5s)"},
+{"predictholdnear n", "Hold time when near (0.5s)"},
+{"predictrot", "Toggle rotation matching"},
 {"predictinfo", "Show predict settings"},
 {"aimbot", "Load aimbot"},
 {"ia", "Load Ninni Hub"},
@@ -2692,8 +2698,7 @@ local cmdHints = {
 {p="^predictholdfar%s*$",h=function() return string.format("predictholdfar [0.1-5]  (current: %.2fs)", PredictS.holdTimeFar) end},
 {p="^predictholdnear%s+(%S+)",h=function(m) return "Hold near time: "..m.."s" end},
 {p="^predictholdnear%s*$",h=function() return string.format("predictholdnear [0.1-5]  (current: %.2fs)", PredictS.holdTimeNear) end},
-{p="^predictholdmax%s+(%S+)",h=function(m) return "Max hold time: "..m.."s" end},
-{p="^predictholdmax%s*$",h=function() return string.format("predictholdmax [0.1-1.0]  (current: %.2fs)", PredictS.maxHoldTime) end},
+{p="^predictrot%s*$",h=function() return PredictS.matchRotation and "Disable rotation match" or "Enable rotation match" end},
 {p="^predictinfo%s*$",h=function() return "Show predict settings" end},
 {p="^safefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return SafeFlyS.active and "Stop safefly" or "Start safefly" end},
 {p="^unsafefly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop safefly" end},
@@ -2829,22 +2834,20 @@ if v then
 PredictS.holdTimeNear = math.clamp(v, 0.1, 5.0)
 notifSet("predictholdnear", string.format("HoldNear: %.2fs", PredictS.holdTimeNear), true)
 end
-elseif cmd == "predictholdmax" then
+elseif cmd == "predictrot" or cmd == "predictrotation" then
 if not S.abuseMode then return end
-local v = tonumber(arg1)
-if v then
-PredictS.maxHoldTime = math.clamp(v, 0.1, 1.0)
-notifSet("predictholdmax", string.format("MaxHold: %.2fs", PredictS.maxHoldTime), true)
-end
+PredictS.matchRotation = not PredictS.matchRotation
+notifSet("predictrot", PredictS.matchRotation and "PredictRot ON" or "PredictRot OFF", PredictS.matchRotation)
 elseif cmd == "predictinfo" then
-notifSet("predictinfo", string.format("P:%.2f x%.2f %s%s%s max%.2f h%d/%.1f/%.1f/cap%.1f",
+notifSet("predictinfo", string.format("P:%.2f x%.2f %s%s%s%s max%.2f h%d/%.1f/%.1f",
 PredictS.baseTime, PredictS.userMultiplier,
 PredictS.velocityScale and "V" or "-",
 PredictS.distanceScale and "D" or "-",
 PredictS.gravityComp and "G" or "-",
+PredictS.matchRotation and "R" or "-",
 PredictS.maxTime,
-PredictS.holdThreshold, PredictS.holdTimeFar, PredictS.holdTimeNear, PredictS.maxHoldTime), true)
-task.delay(5, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
+PredictS.holdThreshold, PredictS.holdTimeFar, PredictS.holdTimeNear), true)
+task.delay(4, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
 elseif cmd == "esptransparency" or cmd == "espt" then
 local v = tonumber(arg1)
 if v then S.espAlpha = math.clamp(v, 0.01, 0.95); applyESPTransparency() end
