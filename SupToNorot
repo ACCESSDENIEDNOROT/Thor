@@ -1,4 +1,4 @@
-local VERSION = "2.2.5"
+local VERSION = "2.2.7"
 local HUB_NAME = "NotRot Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
@@ -109,8 +109,8 @@ bobPhase = 0,
 savedHum = nil,
 }
 local PredictS = {
-baseTime = 0.5,
-userMultiplier = 1.2,
+baseTime = 0.45,
+userMultiplier = 1.1,
 velocityScale = true,
 distanceScale = true,
 gravityComp = true,
@@ -988,12 +988,44 @@ t = t * (1 + distBonus)
 end
 t = t * PredictS.userMultiplier
 t = math.min(t, PredictS.maxTime)
-local predicted = targetRoot.Position + vel * t
+local predicted = targetRoot.Velocity * t + targetRoot.Position
+predicted = targetRoot.Position + vel * t
 if PredictS.gravityComp and vel.Y < 0 then
 local gravityDrop = 0.5 * workspace.Gravity * t * t
 predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.45, 9), 0)
 end
 return predicted, targetCF, dist
+end
+-- === TRAIL TEMPORAL (aplicado a la víctima del fling) ===
+local function applyTempTrail(target, duration)
+    if not target then return end
+    local char = target.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if not hrp then return end
+    pcall(function()
+        local a0 = Instance.new("Attachment")
+        a0.Position = Vector3.new(0, 1.5, 0)
+        a0.Parent = hrp
+        local a1 = Instance.new("Attachment")
+        a1.Position = Vector3.new(0, -1.5, 0)
+        a1.Parent = hrp
+        local trail = Instance.new("Trail")
+        trail.Attachment0 = a0
+        trail.Attachment1 = a1
+        trail.Color = ColorSequence.new(Color3.fromRGB(255, 30, 30))
+        trail.Transparency = NumberSequence.new(0.1)
+        trail.Lifetime = 0.4
+        trail.MinLength = 0
+        trail.FaceCamera = true
+        trail.LightEmission = 1
+        trail.LightInfluence = 0
+        trail.WidthScale = NumberSequence.new(1)
+        trail.Parent = hrp
+        Debris:AddItem(trail, duration)
+        Debris:AddItem(a0, duration)
+        Debris:AddItem(a1, duration)
+    end)
 end
 -- === WALKFLING ===
 local function killWalkfling()
@@ -1097,6 +1129,7 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling", "Fling", 1.0)
+applyTempTrail(target, 0.2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
@@ -1109,7 +1142,6 @@ else
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
 end
 end
--- Pequeña espera antes del TP para dejar que el fling cargue
 wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
@@ -1187,6 +1219,7 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 1.2)
+applyTempTrail(target, 0.2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
@@ -1194,7 +1227,6 @@ if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() end
--- Pequeña espera para que cargue el fling/walkfling (sin bloquear CFrame)
 wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
@@ -2533,14 +2565,14 @@ local COMMAND_INFO = {
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling with adaptive predict + hold"},
-{"fling2 [player]", "Fling walkfling + adaptive predict"},
+{"fling [player]", "Fling (con trail rojo 0.2s)"},
+{"fling2 [player]", "Fling walkfling (con trail rojo 0.2s)"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
 {"untogglewalkfling", "Unbind walkfling key"},
-{"predict n", "Base predict time (0.5)"},
-{"predictmulti n", "User predict multiplier (1.2)"},
+{"predict n", "Base predict time (0.45)"},
+{"predictmulti n", "User predict multiplier (1.1)"},
 {"predictvel", "Toggle velocity-based predict"},
 {"predictscale", "Toggle distance-based predict"},
 {"predictgravity", "Toggle gravity compensation"},
