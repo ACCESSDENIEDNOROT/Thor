@@ -1,6 +1,5 @@
 local VERSION = "2.2.8"
 local HUB_NAME = "SUPRA HUB V" .. VERSION
-local SHIRT_CHECK_ID = "5848458859"
 if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,33 +13,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
-local AUTHORIZED = false
-local function checkShirt()
-local char = lp.Character
-if not char then return false end
-local shirt = char:FindFirstChildOfClass("Shirt")
-if not shirt then return false end
-local t = shirt.ShirtTemplate
-if not t or t == "" then return false end
-return string.find(t, SHIRT_CHECK_ID, 1, true) ~= nil
-end
-local function updateAuth()
-AUTHORIZED = checkShirt()
-return AUTHORIZED
-end
-updateAuth()
-lp.CharacterAdded:Connect(function()
-task.wait(1)
-updateAuth()
-end)
-task.spawn(function()
-while true do
-task.wait(2)
-if lp.Character and lp.Character:FindFirstChildOfClass("Shirt") then
-updateAuth()
-end
-end
-end)
 local C = {
 BG = Color3.fromRGB(18, 18, 20),
 PANEL = Color3.fromRGB(26, 26, 29),
@@ -1027,7 +999,6 @@ predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.4, 8), 0)
 end
 return predicted, targetCF, dist
 end
--- === WALKFLING ===
 local function killWalkfling()
 if S.walkflingThread then
 pcall(function() S.walkflingThread:Disconnect() end)
@@ -1112,7 +1083,6 @@ if not keyCode then return end
 T.WalkflingKey = #keyName == 1 and keyName:lower() or keyName
 T.WalkflingConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then toggleWalkfling() end
 end)
 end
@@ -1578,7 +1548,6 @@ if not keyCode then return end
 T.SafeFlyKey = #keyName == 1 and keyName:lower() or keyName
 T.SafeFlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then toggleSafeFly() end
 end)
 end
@@ -2010,7 +1979,6 @@ if not keyCode then return end
 T.AuraKey = #keyName == 1 and keyName:lower() or keyName
 T.AuraConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then toggleAura() end
 end)
 end
@@ -2342,7 +2310,6 @@ T.ESPKey = #keyName == 1 and keyName:lower() or keyName
 updateESPBtnText()
 T.ESPConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then
 if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
 else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
@@ -2365,7 +2332,6 @@ T.FCKey = #keyName == 1 and keyName:lower() or keyName
 updateFCBtnText()
 T.FCConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then
 if S.fcRunning then stopFreecam(); updateBtn("fc", false)
 else startFreecam(); updateBtn("fc", S.fcRunning) end
@@ -2388,7 +2354,6 @@ T.FlyKey = #keyName == 1 and keyName:lower() or keyName
 updateFlyBtnText()
 T.FlyConn = UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
-if not AUTHORIZED then return end
 if input.KeyCode == keyCode then
 if FlyS.flying then stopFly() else
 local ok = startFly()
@@ -2842,13 +2807,6 @@ end
 return "Type a command... (press ? for help)"
 end
 local function execCmd(raw)
-if not AUTHORIZED then
-updateAuth()
-if not AUTHORIZED then
-showNotify and showNotify("Unauthorized: shirt required", C.REJECT)
-return
-end
-end
 local str   = raw:lower():gsub("^%s+",""):gsub("%s+$","")
 if str == "" then return end
 local parts = str:split(" ")
@@ -3181,7 +3139,6 @@ local cmd, query = parseACInput(textForAC)
 if cmd then showAC(cmd, query) else clearAC() end
 end)
 UserInputService.InputBegan:Connect(function(input, gp)
-if not AUTHORIZED then return end
 if S.prefixWaiting then
 if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 local kn   = input.KeyCode.Name
@@ -3283,16 +3240,9 @@ end
 lp.CharacterAdded:Connect(function(char)
 task.wait(0.5)
 setupDeathListener()
-updateAuth()
 end)
 setupDeathListener()
 startNpcEspLoop()
-task.spawn(function()
-task.wait(1)
-if not AUTHORIZED then
-warn("[Supra Hub] Unauthorized: You need the required shirt (ID: " .. SHIRT_CHECK_ID .. ")")
-end
-end)
 if _G.CmdConfigs then
 task.spawn(function()
 task.wait(1)
