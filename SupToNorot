@@ -2,7 +2,7 @@ local VERSION = "2.2.5"
 local HUB_NAME = "NotRot Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- === PASSWORD CHECK ===
+
 local _REQUIRED_PASS = "NKR24GKKXKLXDD"
 local _passOK = false
 if type(_G.Password) == "table" then
@@ -13,7 +13,6 @@ elseif _G.Password == _REQUIRED_PASS then
     _passOK = true
 end
 if not _passOK then
-    warn("[NotRot Hub] Password incorrecta o no definida. Setea _G.Password = {\"".._REQUIRED_PASS.."\"} antes de ejecutar.")
     return
 end
 
