@@ -748,7 +748,7 @@ local horizontalDist = math.sqrt(dir.X * dir.X + dir.Z * dir.Z)
 targetPitch = math.atan2(dir.Y, horizontalDist)
 targetPitch = math.clamp(targetPitch, -math.rad(60), math.rad(10))
 end
-local duration = 0.5
+local duration = 2.5
 local elapsed = 0
 S.flyToConn = RunService.RenderStepped:Connect(function(dt)
 if not S.fcRunning or S.flyTarget ~= targetPos then
