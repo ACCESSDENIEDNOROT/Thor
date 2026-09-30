@@ -12,12 +12,8 @@ elseif _G.Password == _REQUIRED_PASS then
     _passOK = true
 end
 if not _passOK then
-game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "No niggers allowed.";
-    Text = "Nigger detected.";
-    Duration = 5;
-})
-return
+    warn("[NotRot Hub] Password incorrecta o no definida. Setea _G.Password = {\"".._REQUIRED_PASS.."\"} antes de ejecutar.")
+    return
 end
 
 local Players = game:GetService("Players")
