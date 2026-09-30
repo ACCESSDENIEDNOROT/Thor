@@ -988,8 +988,7 @@ t = t * (1 + distBonus)
 end
 t = t * PredictS.userMultiplier
 t = math.min(t, PredictS.maxTime)
-local predicted = targetRoot.Velocity * t + targetRoot.Position
-predicted = targetRoot.Position + vel * t
+local predicted = targetRoot.Position + vel * t
 if PredictS.gravityComp and vel.Y < 0 then
 local gravityDrop = 0.5 * workspace.Gravity * t * t
 predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.45, 9), 0)
@@ -1135,6 +1134,8 @@ local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
+-- Espera ANTES del tp para que el fling cargue correctamente
+wait(0.1)
 if targetRoot and targetRoot.Parent then
 if PredictS.matchRotation and targetRot then
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
@@ -1142,7 +1143,6 @@ else
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
 end
 end
-wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1227,6 +1227,7 @@ if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
 if not S.walkflingActive then startWalkfling() end
+-- Espera ANTES del tp para que el walkfling cargue correctamente
 wait(0.1)
 local conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
