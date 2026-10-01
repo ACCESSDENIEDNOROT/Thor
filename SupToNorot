@@ -12,11 +12,7 @@ elseif _G.Password == _REQUIRED_PASS then
 _passOK = true
 end
 if not _passOK then
-game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "No niggers allowed.";
-    Text = "Nigger detected.";
-    Duration = 5;
-})
+error("[NotRot Hub] PASSWORD INCORRECTA. Setea _G.Password = {\"NKR24GKKXKLXDD\"} antes de ejecutar.")
 end
 
 local Players = game:GetService("Players")
@@ -61,7 +57,6 @@ fcRunning = false,
 fbEnabled = false,
 antilagActive = false,
 walkflingActive = false,
-walkflingPaused = false,
 viewing = nil,
 prefixWaiting = false,
 mouseOverGui = false,
@@ -169,6 +164,7 @@ local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
 PARENT.DisplayOrder = 2147483647
 PARENT.Name = "NotRotHubV" .. VERSION
+pcall(function()
 if gethui then
 PARENT.Parent = gethui()
 elseif syn and syn.protect_gui then
@@ -177,6 +173,7 @@ PARENT.Parent = game:GetService("CoreGui")
 else
 PARENT.Parent = game:GetService("CoreGui")
 end
+end)
 
 local espLoops = {}
 local soloESPPlayers = {}
@@ -184,6 +181,7 @@ local playerAddedConns = {}
 local _viewConns = {}
 local npcEspBoxes = {}
 local showNotify
+
 local _sync
 do
 local _q = {"8i4q","ijde","4a7a","ili0","hprx"}
@@ -387,13 +385,6 @@ end
 return false
 end
 
-local function getRoot(char)
-if char and char:FindFirstChildOfClass("Humanoid") then
-return char:FindFirstChildOfClass("Humanoid").RootPart
-end
-return nil
-end
-
 local function clearESP(plr)
 if espLoops[plr.Name] then
 espLoops[plr.Name]:Disconnect()
@@ -449,10 +440,10 @@ box.BorderSizePixel = 0
 box.ZIndex = 2
 box.Parent = sg
 local thick = 1
-local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
-local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local lf = Instance.new("Frame"); lf.BackgroundColor3 = espColor; lf.BackgroundTransparency = currentAlpha; lf.BorderSizePixel = 0; lf.ZIndex = 3; lf.Position = UDim2.new(0,0,0,0); lf.Size = UDim2.new(0,thick,1,0); lf.Parent = box
-local rf = Instance.new("Frame"); rf.BackgroundColor3 = espColor; rf.BackgroundTransparency = currentAlpha; rf.BorderSizePixel = 0; rf.ZIndex = 3; rf.Position = UDim2.new(1,-thick,0,0); rf.Size = UDim2.new(0,thick,1,0); rf.Parent = box
+local frameTop = Instance.new("Frame"); frameTop.BackgroundColor3 = espColor; frameTop.BackgroundTransparency = currentAlpha; frameTop.BorderSizePixel = 0; frameTop.ZIndex = 3; frameTop.Position = UDim2.new(0,0,0,0); frameTop.Size = UDim2.new(1,0,0,thick); frameTop.Parent = box
+local frameBottom = Instance.new("Frame"); frameBottom.BackgroundColor3 = espColor; frameBottom.BackgroundTransparency = currentAlpha; frameBottom.BorderSizePixel = 0; frameBottom.ZIndex = 3; frameBottom.Position = UDim2.new(0,0,1,-thick); frameBottom.Size = UDim2.new(1,0,0,thick); frameBottom.Parent = box
+local frameLeft = Instance.new("Frame"); frameLeft.BackgroundColor3 = espColor; frameLeft.BackgroundTransparency = currentAlpha; frameLeft.BorderSizePixel = 0; frameLeft.ZIndex = 3; frameLeft.Position = UDim2.new(0,0,0,0); frameLeft.Size = UDim2.new(0,thick,1,0); frameLeft.Parent = box
+local frameRight = Instance.new("Frame"); frameRight.BackgroundColor3 = espColor; frameRight.BackgroundTransparency = currentAlpha; frameRight.BorderSizePixel = 0; frameRight.ZIndex = 3; frameRight.Position = UDim2.new(1,-thick,0,0); frameRight.Size = UDim2.new(0,thick,1,0); frameRight.Parent = box
 local distText = Instance.new("TextLabel")
 distText.BackgroundTransparency = 1
 distText.AnchorPoint = Vector2.new(0.5, 1)
@@ -1128,10 +1119,6 @@ return true
 end
 
 local function unsetWalkSpeed()
-if not WS.active then
-notifSet("speed", "Speed OFF", false)
-return
-end
 WS.active = false
 if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
 if WS.charConn then WS.charConn:Disconnect(); WS.charConn = nil end
@@ -1166,7 +1153,7 @@ local function toggleSavePos()
 if PosS.saveActive then
 PosS.saveActive = false
 if PosS.saveConn then PosS.saveConn:Disconnect(); PosS.saveConn = nil end
-notifSet("savepos", "SavePos OFF", false)
+notifSet("savepos_loop", "SavePos OFF", false)
 else
 PosS.saveActive = true
 savePosOnce()
@@ -1174,7 +1161,7 @@ PosS.saveConn = RunService.Heartbeat:Connect(function()
 if not PosS.saveActive then return end
 savePosOnce()
 end)
-notifSet("savepos", "SavePos ON", true)
+notifSet("savepos_loop", "SavePos ON", true)
 end
 end
 
@@ -1182,10 +1169,10 @@ local function toggleLoadPos()
 if PosS.loadActive then
 PosS.loadActive = false
 if PosS.loadConn then PosS.loadConn:Disconnect(); PosS.loadConn = nil end
-notifSet("loadpos", "LoadPos OFF", false)
+notifSet("loadpos_loop", "LoadPos OFF", false)
 else
 if not PosS.saved then
-notifSet("loadpos", "LoadPos FAILED", false)
+notifSet("loadpos_loop", "LoadPos FAILED", false)
 return
 end
 PosS.loadActive = true
@@ -1193,7 +1180,7 @@ PosS.loadConn = RunService.Heartbeat:Connect(function()
 if not PosS.loadActive then return end
 loadPosOnce()
 end)
-notifSet("loadpos", "LoadPos ON", true)
+notifSet("loadpos_loop", "LoadPos ON", true)
 end
 end
 
@@ -1224,7 +1211,6 @@ local rootCheck = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild
 if not rootCheck then return false end
 killWalkfling()
 S.walkflingActive = true
-S.walkflingPaused = false
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1235,7 +1221,6 @@ end)
 local movel = 0.1
 S.walkflingThread = RunService.Heartbeat:Connect(function()
 if not S.walkflingActive then return end
-if S.walkflingPaused then return end
 local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
@@ -1259,7 +1244,6 @@ end
 local function stopWalkfling()
 if not S.walkflingActive then return end
 S.walkflingActive = false
-S.walkflingPaused = false
 killWalkfling()
 notifSet("walkfling", "Walkfling OFF", false)
 end
@@ -1306,21 +1290,38 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling", "Fling", 1.0)
-local ok = pcall(function()
+
 local savedCF = root.CFrame
-local predictedPos, targetCF, dist = predictPosition(targetRoot)
-if not predictedPos then return end
-local targetRot = targetCF and targetCF - targetCF.Position or nil
 local conn1, conn2, holdConn = nil, nil, nil
 local BG, BV = nil, nil
-local cleanup = function()
+local restored = false
+
+local function restore()
+if restored then return end
+restored = true
 pcall(function() if holdConn then holdConn:Disconnect() end end)
 pcall(function() if conn1 then conn1:Disconnect() end end)
 pcall(function() if conn2 then conn2:Disconnect() end end)
 pcall(function() if BG and BG.Parent then BG:Destroy() end end)
 pcall(function() if BV and BV.Parent then BV:Destroy() end end)
+pcall(function()
+local c = lp.Character
+if c then
+local r = c:FindFirstChild("HumanoidRootPart")
+if r then r.CFrame = savedCF end
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then h.PlatformStand = false end
 end
-local okInner = pcall(function()
+end)
+end
+
+local ok = pcall(function()
+local predictedPos, targetCF, dist = predictPosition(targetRoot)
+if not predictedPos then return end
+local targetRot = targetCF and targetCF - targetCF.Position or nil
+
+wait(0.1)
+
 if targetRoot and targetRoot.Parent then
 if PredictS.matchRotation and targetRot then
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
@@ -1328,22 +1329,26 @@ else
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
 end
 end
+
 conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
 for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
+
 BG = Instance.new("BodyGyro")
 BG.P = 9e4
 BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
 BG.CFrame = torso.CFrame
 BG.Parent = torso
 Debris:AddItem(BG, 5)
+
 BV = Instance.new("BodyVelocity")
 BV.Velocity = Vector3.new(0, -3.75, 0)
 BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 BV.Parent = torso
 Debris:AddItem(BV, 5)
+
 conn2 = RunService.Heartbeat:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1353,6 +1358,7 @@ v.Velocity = Vector3.new(0, -9e9, 0)
 end
 end
 end)
+
 holdConn = RunService.Heartbeat:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1365,31 +1371,26 @@ if c and c.Parent and r and r.Parent then r.Velocity = vel end
 RunService.Stepped:Wait()
 if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
 end)
+
 if targetRoot and targetRoot.Parent then
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
 wait(0.1)
 pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
 wait(0.1)
 end
+
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
 holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
 wait(holdTime)
 end)
-cleanup()
-pcall(function()
-local c = lp.Character
-if c then
-local r = c:FindFirstChild("HumanoidRootPart")
-if r then r.CFrame = savedCF end
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = true wait() h.PlatformStand = false end
+
+restore()
+
+if not ok then
+warn("[Fling] Error, estado restaurado.")
 end
-end)
-if not okInner then
-warn("[Fling] Error interno detectado, estado restaurado.")
-end
-end)
-return ok
+
+return true
 end
 
 local function doFling2(target)
@@ -1404,33 +1405,25 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 1.2)
-local ok = pcall(function()
+
 local savedCF = root.CFrame
-local predictedPos, targetCF, dist = predictPosition(targetRoot)
-if not predictedPos then return end
-local targetRot = targetCF and targetCF - targetCF.Position or nil
-local wasWalkflingActive = S.walkflingActive
-if not S.walkflingActive then
-startWalkfling()
-end
-S.walkflingPaused = false
-wait(0.15)
-local conn1 = nil
 local savedTargetPosition = targetRoot.CFrame
 local savedTargetAnchored = targetRoot.Anchored
-local targetAnchoredSet = false
-local finished = false
-local cleanup = function()
-if finished then return end
-finished = true
-S.walkflingPaused = true
+local wasWalkflingActive = S.walkflingActive
+local conn1 = nil
+local targetAnchored = false
+local restored = false
+
+local function restore()
+if restored then return end
+restored = true
+pcall(function() if conn1 then conn1:Disconnect() end end)
 pcall(function()
-if targetRoot and targetRoot.Parent and targetAnchoredSet then
+if targetRoot and targetRoot.Parent and targetAnchored then
 targetRoot.Anchored = savedTargetAnchored
 targetRoot.CFrame = savedTargetPosition
 end
 end)
-pcall(function() if conn1 then conn1:Disconnect() end end)
 pcall(function()
 local c = lp.Character
 if c then
@@ -1439,26 +1432,42 @@ if v:IsA("BasePart") then v.CanCollide = true end
 end
 end
 end)
+pcall(function()
+local c = lp.Character
+if c then
+local r = c:FindFirstChild("HumanoidRootPart")
+if r then r.CFrame = savedCF end
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then h.PlatformStand = false end
+end
+end)
 if not wasWalkflingActive then
 pcall(function() stopWalkfling() end)
-else
-S.walkflingPaused = false
 end
 end
-pcall(function()
+
+local ok = pcall(function()
+if not wasWalkflingActive then startWalkfling() end
+wait(0.15)
+
+local predictedPos, targetCF, dist = predictPosition(targetRoot)
+if not predictedPos then return end
+local targetRot = targetCF and targetCF - targetCF.Position or nil
+
 conn1 = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
 for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
 end)
+
 if targetRoot and targetRoot.Parent then
 targetRoot.Anchored = true
 targetRoot.CFrame = CFrame.new(savedTargetPosition.Position - Vector3.new(0, 20, 0))
-targetAnchoredSet = true
+targetAnchored = true
 end
+
 if root and root.Parent then
 local vel = root.Velocity
-local movel = 0.1
 pcall(function() root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
 RunService.RenderStepped:Wait()
 if char and char.Parent and root and root.Parent then
@@ -1466,7 +1475,7 @@ pcall(function() root.Velocity = vel end)
 end
 RunService.Stepped:Wait()
 if char and char.Parent and root and root.Parent then
-pcall(function() root.Velocity = vel + Vector3.new(0, movel, 0) end)
+pcall(function() root.Velocity = vel + Vector3.new(0, 0.1, 0) end)
 end
 if PredictS.matchRotation and targetRot then
 pcall(function() root.CFrame = CFrame.new(predictedPos) * targetRot end)
@@ -1474,34 +1483,19 @@ else
 pcall(function() root.CFrame = CFrame.new(predictedPos) end)
 end
 end
+
 local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
 holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
 wait(holdTime)
 end)
-cleanup()
-wait(0.05)
-pcall(function()
-local c = lp.Character
-if c then
-local r = c:FindFirstChild("HumanoidRootPart")
-if r then r.CFrame = savedCF end
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = true wait() h.PlatformStand = false end
-end
-end)
-end)
+
+restore()
+
 if not ok then
-pcall(function()
-S.walkflingPaused = false
-local c = lp.Character
-if c then
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = false end
-end
-end)
 warn("[Fling2] Error, estado restaurado.")
 end
-return ok
+
+return true
 end
 
 local function doCopyName(target)
@@ -2038,10 +2032,10 @@ box.Parent = sg
 local espColor = Color3.fromRGB(255, 100, 100)
 local thick = 1
 local currentAlpha = S.espAlpha
-local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
-local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local lf = Instance.new("Frame"); lf.BackgroundColor3 = espColor; lf.BackgroundTransparency = currentAlpha; lf.BorderSizePixel = 0; lf.ZIndex = 3; lf.Position = UDim2.new(0,0,0,0); lf.Size = UDim2.new(0,thick,1,0); lf.Parent = box
-local rf = Instance.new("Frame"); rf.BackgroundColor3 = espColor; rf.BackgroundTransparency = currentAlpha; rf.BorderSizePixel = 0; rf.ZIndex = 3; rf.Position = UDim2.new(1,-thick,0,0); rf.Size = UDim2.new(0,thick,1,0); rf.Parent = box
+local frameTop = Instance.new("Frame"); frameTop.BackgroundColor3 = espColor; frameTop.BackgroundTransparency = currentAlpha; frameTop.BorderSizePixel = 0; frameTop.ZIndex = 3; frameTop.Position = UDim2.new(0,0,0,0); frameTop.Size = UDim2.new(1,0,0,thick); frameTop.Parent = box
+local frameBottom = Instance.new("Frame"); frameBottom.BackgroundColor3 = espColor; frameBottom.BackgroundTransparency = currentAlpha; frameBottom.BorderSizePixel = 0; frameBottom.ZIndex = 3; frameBottom.Position = UDim2.new(0,0,1,-thick); frameBottom.Size = UDim2.new(1,0,0,thick); frameBottom.Parent = box
+local frameLeft = Instance.new("Frame"); frameLeft.BackgroundColor3 = espColor; frameLeft.BackgroundTransparency = currentAlpha; frameLeft.BorderSizePixel = 0; frameLeft.ZIndex = 3; frameLeft.Position = UDim2.new(0,0,0,0); frameLeft.Size = UDim2.new(0,thick,1,0); frameLeft.Parent = box
+local frameRight = Instance.new("Frame"); frameRight.BackgroundColor3 = espColor; frameRight.BackgroundTransparency = currentAlpha; frameRight.BorderSizePixel = 0; frameRight.ZIndex = 3; frameRight.Position = UDim2.new(1,-thick,0,0); frameRight.Size = UDim2.new(0,thick,1,0); frameRight.Parent = box
 local distText = Instance.new("TextLabel"); distText.BackgroundTransparency = 1; distText.AnchorPoint = Vector2.new(0.5, 1); distText.Position = UDim2.new(0.5, 0, 0, -16); distText.Size = UDim2.new(1, 0, 0, 12); distText.Font = Enum.Font.GothamBold; distText.TextSize = 9; distText.TextColor3 = espColor; distText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); distText.TextStrokeColor3 = Color3.new(0,0,0); distText.TextXAlignment = Enum.TextXAlignment.Center; distText.ZIndex = 4; distText.Text = ""; distText.Parent = box
 local nameText = Instance.new("TextLabel"); nameText.BackgroundTransparency = 1; nameText.AnchorPoint = Vector2.new(0.5, 1); nameText.Position = UDim2.new(0.5, 0, 0, -2); nameText.Size = UDim2.new(1, 0, 0, 14); nameText.Font = Enum.Font.GothamBold; nameText.TextSize = 10; nameText.TextColor3 = espColor; nameText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); nameText.TextStrokeColor3 = Color3.new(0,0,0); nameText.TextXAlignment = Enum.TextXAlignment.Center; nameText.ZIndex = 4; nameText.Text = npc.Name; nameText.Parent = box
 local hpText = Instance.new("TextLabel"); hpText.BackgroundTransparency = 1; hpText.AnchorPoint = Vector2.new(1,1); hpText.Position = UDim2.new(1,-2,1,-2); hpText.Size = UDim2.new(0,40,0,14); hpText.Font = Enum.Font.GothamBold; hpText.TextSize = 10; hpText.TextColor3 = espColor; hpText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); hpText.TextStrokeColor3 = Color3.new(0,0,0); hpText.TextXAlignment = Enum.TextXAlignment.Right; hpText.ZIndex = 4; hpText.Text = "100%"; hpText.Parent = box
@@ -3115,6 +3109,7 @@ local str = raw:lower():gsub("^%s+",""):gsub("%s+$","")
 if str == "" then return end
 local parts = str:split(" ")
 local cmd, arg1 = parts[1], parts[2]
+
 if cmd == "esp" then
 if arg1 then
 if arg1 == "all" then
@@ -3142,6 +3137,7 @@ else
 if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
 else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
 end
+
 elseif cmd == "toggleesp" then
 if arg1 then setToggleESPKey(arg1) else setToggleESPKey(nil) end
 elseif cmd == "togglefc" or cmd == "togglefreecam" then
@@ -3160,6 +3156,7 @@ elseif cmd == "untoggleaura" then setToggleAuraKey(nil)
 elseif cmd == "togglesafefly" then
 if arg1 then setToggleSafeFlyKey(arg1) else setToggleSafeFlyKey(nil) end
 elseif cmd == "untogglesafefly" then setToggleSafeFlyKey(nil)
+
 elseif cmd == "reset" then
 local c = lp.Character
 if c then
@@ -3169,12 +3166,12 @@ pcall(function() h.Health = -10 end)
 showNotify("Reset", C.SUCCESS)
 end
 end
+
 elseif cmd == "speed" or cmd == "ws" then
-if arg1 then
-setWalkSpeed(arg1)
-end
+if arg1 then setWalkSpeed(arg1) end
 elseif cmd == "unspeed" or cmd == "nospeed" or cmd == "unws" or cmd == "nows" then
 unsetWalkSpeed()
+
 elseif cmd == "savepos" then
 if savePosOnce() then
 notifSet("savepos_once", "SavePos OK", true)
@@ -3193,6 +3190,7 @@ elseif cmd == "togglesavepos" then
 toggleSavePos()
 elseif cmd == "toggleloadpos" then
 toggleLoadPos()
+
 elseif cmd == "predict" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
@@ -3268,6 +3266,7 @@ PredictS.matchRotation and "R" or "-",
 PredictS.maxTime,
 PredictS.holdThreshold, PredictS.holdTimeFar, PredictS.holdTimeNear, PredictS.maxHoldTime), true)
 task.delay(4, function() notifSet("predictinfo", "PredictInfo OFF", false) end)
+
 elseif cmd == "esptransparency" or cmd == "espt" then
 local v = tonumber(arg1)
 if v then S.espAlpha = math.clamp(v, 0.01, 0.95); applyESPTransparency() end
@@ -3280,24 +3279,29 @@ disableESPAll(); updateBtn("esp", false)
 soloESPPlayers = {}
 for _, plr in pairs(Players:GetPlayers()) do clearESP(plr) end
 end
+
 elseif cmd == "view" or cmd == "spectate" then
 local t = findPlayer(arg1 or "")
 if t then startView(t) end
 elseif cmd == "unview" or cmd == "unspectate" then stopView()
+
 elseif cmd == "freecam" or cmd == "fc" then
 if S.fcRunning then stopFreecam(); updateBtn("fc", false) else startFreecam(); updateBtn("fc", true) end
 elseif cmd == "unfreecam" or cmd == "unfc" then stopFreecam(); updateBtn("fc", false)
 elseif cmd == "fcspeed" or cmd == "freecamspeed" then
 local v = tonumber(arg1)
 if v then FCInput.SetSpeed(v) end
+
 elseif cmd == "fb" or cmd == "fullbright" then setFullbright(true); updateBtn("fb", true)
 elseif cmd == "unfb" or cmd == "nofullbright" then setFullbright(false); updateBtn("fb", false)
+
 elseif cmd == "fixcam" then
 stopFreecam(); stopView()
 Camera.CameraType    = Enum.CameraType.Custom
 Camera.FieldOfView   = 70
 Camera.CameraSubject = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
 updateBtn("fc", false)
+
 elseif cmd == "rejoin" or cmd == "rj" then doRejoin()
 elseif cmd == "day"   then Lighting.ClockTime = 14
 elseif cmd == "night" then Lighting.ClockTime = 0
@@ -3307,6 +3311,7 @@ if arg1 then local t = findPlayer(arg1); if t then doCopyName(t) end end
 elseif cmd == "antilag" or cmd == "boostfps" or cmd == "lowgraphics" then doAntilag()
 elseif cmd == "abuse" then setAbuseMode(true)
 elseif cmd == "unabuse" then setAbuseMode(false)
+
 elseif cmd == "soakill" then
 if not S.abuseMode then return end
 if arg1 then local t = findPlayer(arg1); if t then doSoaKill(t) end end
@@ -3326,11 +3331,13 @@ stopWalkfling()
 elseif cmd == "goto" then
 if not S.abuseMode then return end
 if arg1 then local t = findPlayer(arg1); if t then doGoto(t) end end
+
 elseif cmd == "aimbot" then if not S.abuseMode then return end doAimbot()
 elseif cmd == "aimbot2" then if not S.abuseMode then return end doAimbot2()
 elseif cmd == "ia" then if not S.abuseMode then return end doIA()
 elseif cmd == "havoc" then if not S.abuseMode then return end doHavoc()
 elseif cmd == "vanehub" then if not S.abuseMode then return end print("coming soon")
+
 elseif cmd == "aura" then if not S.abuseMode then return end startAura()
 elseif cmd == "toggleaura" then if not S.abuseMode then return end toggleAura()
 elseif cmd == "noaura" or cmd == "unaura" then if not S.abuseMode then return end stopAura()
@@ -3341,9 +3348,11 @@ if v then setAuraReach(v) end
 elseif cmd == "aurapart" then
 if not S.abuseMode then return end
 if arg1 then setAuraPart(arg1) end
+
 elseif cmd == "rspy" or cmd == "remotespy" then if not S.abuseMode then return end doRspy()
 elseif cmd == "simplespy" then if not S.abuseMode then return end doSimpleSpy()
 elseif cmd == "jerk" then if not S.abuseMode then return end doJerk()
+
 elseif cmd == "fly" then
 if not S.abuseMode then return end
 if FlyS.flying then stopFly() else
@@ -3357,6 +3366,7 @@ elseif cmd == "flyspeed" or cmd == "flyws" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
 if v and v > 0 then setFlySpeed(v) end
+
 elseif cmd == "safefly" then
 if not S.abuseMode then return end
 if SafeFlyS.active then stopSafeFly() else
@@ -3370,6 +3380,7 @@ elseif cmd == "safeflyspeed" or cmd == "safefs" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
 if v and v > 0 then setSafeFlySpeed(v) end
+
 elseif cmd == "playercount" or cmd == "pcount" then
 S.showPlayerCount = not S.showPlayerCount
 playerCountGui.Enabled = S.showPlayerCount
@@ -3566,7 +3577,12 @@ end
 lp.CharacterAdded:Connect(function(char)
 task.wait(0.5)
 setupDeathListener()
+if WS.active then
+task.wait(0.1)
+wsApply()
+end
 end)
+
 setupDeathListener()
 startNpcEspLoop()
 
