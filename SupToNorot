@@ -2,6 +2,7 @@ local VERSION = "2.2.5"
 local HUB_NAME = "NotRot Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
+-- === PASSWORD CHECK ===
 local _REQUIRED_PASS = "NKR24GKKXKLXDD"
 local _passOK = false
 if type(_G.Password) == "table" then
@@ -12,8 +13,12 @@ elseif _G.Password == _REQUIRED_PASS then
     _passOK = true
 end
 if not _passOK then
-    warn("[NotRot Hub] Password incorrecta o no definida. Setea _G.Password = {\"".._REQUIRED_PASS.."\"} antes de ejecutar.")
-    return
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "No niggers allowed.";
+    Text = "Nigger detected.";
+    Duration = 5;
+})
+return
 end
 
 local Players = game:GetService("Players")
@@ -56,7 +61,6 @@ fcRunning = false,
 fbEnabled = false,
 antilagActive = false,
 walkflingActive = false,
-walkflingPaused = false,
 viewing = nil,
 prefixWaiting = false,
 mouseOverGui = false,
@@ -137,20 +141,6 @@ holdTimeFar = 0.6,
 holdTimeNear = 0.25,
 maxHoldTime = 0.7,
 matchRotation = true,
-}
-local WS = {
-active = false,
-speed = 16,
-default = 16,
-loopConn = nil,
-charConn = nil,
-}
-local PosS = {
-saved = nil,
-saveActive = false,
-loadActive = false,
-saveConn = nil,
-loadConn = nil,
 }
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
@@ -1025,110 +1015,49 @@ predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.45, 9), 0)
 end
 return predicted, targetCF, dist
 end
-local function wsApply()
-if not WS.active then return end
-local char = lp.Character
-if not char then return end
-local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then
-pcall(function() hum.WalkSpeed = WS.speed end)
+-- === TRAIL TEMPORAL (aplicado a la víctima del fling) ===
+local function applyTempTrail(target, duration)
+    if not target then return end
+    local char = target.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if not hrp then return end
+    pcall(function()
+        -- Borrar trails previos del mismo target para no acumular
+        for _, v in pairs(hrp:GetChildren()) do
+            if v:IsA("Trail") and v.Name == "NR_TempTrail" then v:Destroy() end
+            if v:IsA("Attachment") and v.Name:sub(1,7) == "NRTemp_" then v:Destroy() end
+        end
+        local a0 = Instance.new("Attachment")
+        a0.Name = "NRTemp_0"
+        a0.Position = Vector3.new(0, 2, 0)
+        a0.Parent = hrp
+        local a1 = Instance.new("Attachment")
+        a1.Name = "NRTemp_1"
+        a1.Position = Vector3.new(0, -2, 0)
+        a1.Parent = hrp
+        local trail = Instance.new("Trail")
+        trail.Name = "NR_TempTrail"
+        trail.Attachment0 = a0
+        trail.Attachment1 = a1
+        trail.Color = ColorSequence.new(Color3.fromRGB(255, 25, 25))
+        trail.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.15),
+            NumberSequenceKeypoint.new(1, 0.85)
+        })
+        trail.Lifetime = 1.2
+        trail.MinLength = 0
+        trail.FaceCamera = true
+        trail.LightEmission = 1
+        trail.LightInfluence = 0
+        trail.WidthScale = NumberSequence.new(1.6)
+        trail.Parent = hrp
+        Debris:AddItem(trail, duration)
+        Debris:AddItem(a0, duration)
+        Debris:AddItem(a1, duration)
+    end)
 end
-end
-local function wsSetupLoop()
-if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
-local char = lp.Character
-if char then
-local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then
-WS.loopConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(wsApply)
-end
-end
-if WS.charConn then WS.charConn:Disconnect(); WS.charConn = nil end
-WS.charConn = lp.CharacterAdded:Connect(function(nChar)
-local hum = nChar:WaitForChild("Humanoid", 5)
-if hum then
-task.wait(0.1)
-wsApply()
-if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
-WS.loopConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(wsApply)
-end
-end)
-end
-local function setWalkSpeed(n)
-n = tonumber(n)
-if not n or n <= 0 then return false end
-WS.active = true
-WS.speed = n
-wsApply()
-wsSetupLoop()
-notifSet("speed", "Speed: " .. tostring(n), true)
-return true
-end
-local function unsetWalkSpeed()
-if not WS.active then
-notifSet("speed", "Speed OFF", false)
-return
-end
-WS.active = false
-if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
-if WS.charConn then WS.charConn:Disconnect(); WS.charConn = nil end
-local char = lp.Character
-if char then
-local hum = char:FindFirstChildOfClass("Humanoid")
-if hum then pcall(function() hum.WalkSpeed = WS.default end) end
-end
-notifSet("speed", "Speed OFF", false)
-end
-local function savePosOnce()
-local char = lp.Character
-if not char then return false end
-local root = char:FindFirstChild("HumanoidRootPart")
-if not root then return false end
-PosS.saved = root.CFrame
-return true
-end
-local function loadPosOnce()
-if not PosS.saved then return false end
-local char = lp.Character
-if not char then return false end
-local root = char:FindFirstChild("HumanoidRootPart")
-if not root then return false end
-pcall(function() root.CFrame = PosS.saved end)
-return true
-end
-local function toggleSavePos()
-if PosS.saveActive then
-PosS.saveActive = false
-if PosS.saveConn then PosS.saveConn:Disconnect(); PosS.saveConn = nil end
-notifSet("savepos", "SavePos OFF", false)
-else
-PosS.saveActive = true
-savePosOnce()
-PosS.saveConn = RunService.Heartbeat:Connect(function()
-if not PosS.saveActive then return end
-savePosOnce()
-end)
-notifSet("savepos", "SavePos ON", true)
-end
-end
-local function toggleLoadPos()
-if PosS.loadActive then
-PosS.loadActive = false
-if PosS.loadConn then PosS.loadConn:Disconnect(); PosS.loadConn = nil end
-notifSet("loadpos", "LoadPos OFF", false)
-else
-if not PosS.saved then
-notifSet("loadpos", "LoadPos FAILED", false)
-return
-end
-PosS.loadActive = true
-PosS.loadConn = RunService.Heartbeat:Connect(function()
-if not PosS.loadActive then return end
-loadPosOnce()
-end)
-notifSet("loadpos", "LoadPos ON", true)
-end
-end
+-- === WALKFLING ===
 local function killWalkfling()
 if S.walkflingThread then
 pcall(function() S.walkflingThread:Disconnect() end)
@@ -1155,7 +1084,6 @@ local rootCheck = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild
 if not rootCheck then return false end
 killWalkfling()
 S.walkflingActive = true
-S.walkflingPaused = false
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1166,7 +1094,6 @@ end)
 local movel = 0.1
 S.walkflingThread = RunService.Heartbeat:Connect(function()
 if not S.walkflingActive then return end
-if S.walkflingPaused then return end
 local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
@@ -1189,7 +1116,6 @@ end
 local function stopWalkfling()
 if not S.walkflingActive then return end
 S.walkflingActive = false
-S.walkflingPaused = false
 killWalkfling()
 notifSet("walkfling", "Walkfling OFF", false)
 end
@@ -1233,87 +1159,93 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling", "Fling", 1.0)
+applyTempTrail(target, 2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
+
+wait(0.1)
+
 local conn1, conn2, holdConn = nil, nil, nil
 local BG, BV = nil, nil
+
 local cleanup = function()
-pcall(function() if holdConn then holdConn:Disconnect() end end)
-pcall(function() if conn1 then conn1:Disconnect() end end)
-pcall(function() if conn2 then conn2:Disconnect() end end)
-pcall(function() if BG and BG.Parent then BG:Destroy() end end)
-pcall(function() if BV and BV.Parent then BV:Destroy() end end)
+    pcall(function() if holdConn then holdConn:Disconnect() end end)
+    pcall(function() if conn1 then conn1:Disconnect() end end)
+    pcall(function() if conn2 then conn2:Disconnect() end end)
+    pcall(function() if BG and BG.Parent then BG:Destroy() end end)
+    pcall(function() if BV and BV.Parent then BV:Destroy() end end)
 end
+
 local okInner = pcall(function()
-if targetRoot and targetRoot.Parent then
-if PredictS.matchRotation and targetRot then
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
-else
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
-end
-end
-conn1 = RunService.Stepped:Connect(function()
-local c = lp.Character
-if not c then return end
-for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
-end)
-BG = Instance.new("BodyGyro")
-BG.P = 9e4
-BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-BG.CFrame = torso.CFrame
-BG.Parent = torso
-Debris:AddItem(BG, 5)
-BV = Instance.new("BodyVelocity")
-BV.Velocity = Vector3.new(0, -3.75, 0)
-BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-BV.Parent = torso
-Debris:AddItem(BV, 5)
-conn2 = RunService.Heartbeat:Connect(function()
-local c = lp.Character
-if not c then return end
-for _, v in next, c:GetDescendants() do
-if v:IsA("BasePart") and v.Name ~= "Torso" and v.Name ~= "UpperTorso" then
-v.Velocity = Vector3.new(0, -9e9, 0)
-end
-end
-end)
-holdConn = RunService.Heartbeat:Connect(function()
-local c = lp.Character
-if not c then return end
-local r = c:FindFirstChild("HumanoidRootPart")
-if not r then return end
-local vel = r.Velocity
-r.Velocity = vel * -math.huge + Vector3.new(-math.huge, -math.huge, -math.huge)
-RunService.RenderStepped:Wait()
-if c and c.Parent and r and r.Parent then r.Velocity = vel end
-RunService.Stepped:Wait()
-if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
-end)
-if targetRoot and targetRoot.Parent then
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
-wait(0.1)
-pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
-wait(0.1)
-end
-local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
-wait(holdTime)
+    if targetRoot and targetRoot.Parent then
+        if PredictS.matchRotation and targetRot then
+            pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
+        else
+            pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
+        end
+    end
+    conn1 = RunService.Stepped:Connect(function()
+        local c = lp.Character
+        if not c then return end
+        for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
+    end)
+    BG = Instance.new("BodyGyro")
+    BG.P = 9e4
+    BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    BG.CFrame = torso.CFrame
+    BG.Parent = torso
+    Debris:AddItem(BG, 5)
+    BV = Instance.new("BodyVelocity")
+    BV.Velocity = Vector3.new(0, -3.75, 0)
+    BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    BV.Parent = torso
+    Debris:AddItem(BV, 5)
+    conn2 = RunService.Heartbeat:Connect(function()
+        local c = lp.Character
+        if not c then return end
+        for _, v in next, c:GetDescendants() do
+            if v:IsA("BasePart") and v.Name ~= "Torso" and v.Name ~= "UpperTorso" then
+                v.Velocity = Vector3.new(0, -9e9, 0)
+            end
+        end
+    end)
+    holdConn = RunService.Heartbeat:Connect(function()
+        local c = lp.Character
+        if not c then return end
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if not r then return end
+        local vel = r.Velocity
+        r.Velocity = vel * -math.huge + Vector3.new(-math.huge, -math.huge, -math.huge)
+        RunService.RenderStepped:Wait()
+        if c and c.Parent and r and r.Parent then r.Velocity = vel end
+        RunService.Stepped:Wait()
+        if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
+    end)
+    if targetRoot and targetRoot.Parent then
+        pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
+        wait(0.1)
+        pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
+        wait(0.1)
+    end
+    local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+    holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
+    wait(holdTime)
 end)
 cleanup()
 pcall(function()
-local c = lp.Character
-if c then
-local r = c:FindFirstChild("HumanoidRootPart")
-if r then r.CFrame = savedCF end
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = true wait() h.PlatformStand = false end
-end
+    local c = lp.Character
+    if c then
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if r then r.CFrame = savedCF end
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h.PlatformStand = true wait() h.PlatformStand = false end
+    end
 end)
 if not okInner then
-warn("[Fling] Error interno detectado, estado restaurado.")
+    warn("[Fling] Error interno detectado, estado restaurado.")
 end
 end)
 return ok
@@ -1330,104 +1262,85 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 1.2)
+applyTempTrail(target, 2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
-if not S.walkflingActive then
-startWalkfling()
-end
-S.walkflingPaused = false
-wait(0.15)
+if not S.walkflingActive then startWalkfling() end
+
+wait(0.1)
+
 local conn1 = nil
 local savedTargetPosition = targetRoot.CFrame
 local savedTargetAnchored = targetRoot.Anchored
 local targetAnchoredSet = false
-local finished = false
+
 local cleanup = function()
-if finished then return end
-finished = true
-S.walkflingPaused = true
-pcall(function()
-if targetRoot and targetRoot.Parent and targetAnchoredSet then
-targetRoot.Anchored = savedTargetAnchored
-targetRoot.CFrame = savedTargetPosition
+    pcall(function() if conn1 then conn1:Disconnect() end end)
+    pcall(function()
+        if targetRoot and targetRoot.Parent and targetAnchoredSet then
+            targetRoot.Anchored = savedTargetAnchored
+            targetRoot.CFrame = savedTargetPosition
+        end
+    end)
+    pcall(function()
+        local c = lp.Character
+        if c then
+            for _, v in pairs(c:GetChildren()) do
+                if v:IsA("BasePart") then v.CanCollide = true end
+            end
+        end
+    end)
 end
-end)
-pcall(function() if conn1 then conn1:Disconnect() end end)
-pcall(function()
-local c = lp.Character
-if c then
-for _, v in pairs(c:GetChildren()) do
-if v:IsA("BasePart") then v.CanCollide = true end
-end
-end
-end)
-if not wasWalkflingActive then
-pcall(function() stopWalkfling() end)
-else
-S.walkflingPaused = false
-end
-end
-pcall(function()
-conn1 = RunService.Stepped:Connect(function()
-local c = lp.Character
-if not c then return end
-for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
-end)
-if targetRoot and targetRoot.Parent then
-targetRoot.Anchored = true
-targetRoot.CFrame = CFrame.new(savedTargetPosition.Position - Vector3.new(0, 20, 0))
-targetAnchoredSet = true
-end
-if root and root.Parent then
-local vel = root.Velocity
-local movel = 0.1
-pcall(function() root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
-RunService.RenderStepped:Wait()
-if char and char.Parent and root and root.Parent then
-pcall(function() root.Velocity = vel end)
-end
-RunService.Stepped:Wait()
-if char and char.Parent and root and root.Parent then
-pcall(function() root.Velocity = vel + Vector3.new(0, movel, 0) end)
-end
-if PredictS.matchRotation and targetRot then
-pcall(function() root.CFrame = CFrame.new(predictedPos) * targetRot end)
-else
-pcall(function() root.CFrame = CFrame.new(predictedPos) end)
-end
-end
-local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
-wait(holdTime)
+
+local okInner = pcall(function()
+    conn1 = RunService.Stepped:Connect(function()
+        local c = lp.Character
+        if not c then return end
+        for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
+    end)
+    if targetRoot and targetRoot.Parent then
+        targetRoot.Anchored = true
+        targetRoot.CFrame = CFrame.new(savedTargetPosition.Position - Vector3.new(0, 20, 0))
+        targetAnchoredSet = true
+    end
+    local vel, movel = nil, 0.1
+    if root and root.Parent then
+        vel = root.Velocity
+        pcall(function() root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
+        RunService.RenderStepped:Wait()
+        if char and char.Parent and root and root.Parent then root.Velocity = vel end
+        RunService.Stepped:Wait()
+        if char and char.Parent and root and root.Parent then root.Velocity = vel + Vector3.new(0, movel, 0) end
+        if PredictS.matchRotation and targetRot then
+            pcall(function() root.CFrame = CFrame.new(predictedPos) * targetRot end)
+        else
+            pcall(function() root.CFrame = CFrame.new(predictedPos) end)
+        end
+    end
+    local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+    holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
+    wait(holdTime)
 end)
 cleanup()
-wait(0.05)
+wait(0.1)
 pcall(function()
-local c = lp.Character
-if c then
-local r = c:FindFirstChild("HumanoidRootPart")
-if r then r.CFrame = savedCF end
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = true wait() h.PlatformStand = false end
+    local c = lp.Character
+    if c then
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if r then r.CFrame = savedCF end
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h.PlatformStand = true wait() h.PlatformStand = false end
+    end
+end)
+if not wasWalkflingActive then stopWalkfling() end
+if not okInner then
+    warn("[Fling2] Error interno detectado, estado restaurado.")
 end
 end)
-end)
-if not ok then
-pcall(function()
-S.walkflingPaused = false
-local c = lp.Character
-if c then
-local r = c:FindFirstChild("HumanoidRootPart")
-local h = c:FindFirstChildOfClass("Humanoid")
-if h then h.PlatformStand = false end
-end
-end)
-warn("[Fling2] Error, estado restaurado.")
-end
 return ok
 end
 local function doCopyName(target)
@@ -2717,17 +2630,11 @@ local COMMAND_INFO = {
 {"abuse / unabuse", "Abuse mode"},
 {"playercount", "Toggle join alerts"},
 {"reset", "Kill your character"},
-{"speed / ws n", "Set walkspeed (persists)"},
-{"unspeed / nospeed", "Disable walkspeed loop"},
-{"savepos", "Save current position"},
-{"loadpos", "Teleport to saved position"},
-{"togglesavepos", "Continuously save position"},
-{"toggleloadpos", "Continuously load position"},
 }
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling player"},
-{"fling2 [player]", "Fling walkfling"},
+{"fling [player]", "Fling (con trail rojo 2s)"},
+{"fling2 [player]", "Fling walkfling (con trail rojo 2s)"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
@@ -2887,18 +2794,6 @@ local cmdHints = {
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
 {p="^reset%s*$",h=function() return "Kill your character" end},
-{p="^speed%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
-{p="^ws%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
-{p="^speed%s*$",h=function() return "Set walkspeed (persists)" end},
-{p="^ws%s*$",h=function() return "Set walkspeed (persists)" end},
-{p="^unspeed%s*$",h=function() return "Disable walkspeed loop" end},
-{p="^nospeed%s*$",h=function() return "Disable walkspeed loop" end},
-{p="^unws%s*$",h=function() return "Disable walkspeed loop" end},
-{p="^nows%s*$",h=function() return "Disable walkspeed loop" end},
-{p="^savepos%s*$",h=function() return "Save current position" end},
-{p="^loadpos%s*$",h=function() return "Teleport to saved position" end},
-{p="^togglesavepos%s*$",h=function() return PosS.saveActive and "Stop auto savepos" or "Start auto savepos" end},
-{p="^toggleloadpos%s*$",h=function() return PosS.loadActive and "Stop auto loadpos" or "Start auto loadpos" end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
@@ -3009,30 +2904,6 @@ pcall(function() h.Health = -10 end)
 showNotify("Reset", C.SUCCESS)
 end
 end
-elseif cmd == "speed" or cmd == "ws" then
-if arg1 then
-setWalkSpeed(arg1)
-end
-elseif cmd == "unspeed" or cmd == "nospeed" or cmd == "unws" or cmd == "nows" then
-unsetWalkSpeed()
-elseif cmd == "savepos" then
-if savePosOnce() then
-notifSet("savepos_once", "SavePos OK", true)
-task.delay(1.2, function() notifSet("savepos_once", "SavePos OK", false) end)
-else
-notifSet("savepos_once", "SavePos FAILED", false)
-end
-elseif cmd == "loadpos" then
-if loadPosOnce() then
-notifSet("loadpos_once", "LoadPos OK", true)
-task.delay(1.2, function() notifSet("loadpos_once", "LoadPos OK", false) end)
-else
-notifSet("loadpos_once", "LoadPos FAILED", false)
-end
-elseif cmd == "togglesavepos" then
-toggleSavePos()
-elseif cmd == "toggleloadpos" then
-toggleLoadPos()
 elseif cmd == "predict" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
