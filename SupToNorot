@@ -2,15 +2,14 @@ local VERSION = "2.2.5"
 local HUB_NAME = "NotRot Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- === PASSWORD CHECK ===
 local _REQUIRED_PASS = "NKR24GKKXKLXDD"
 local _passOK = false
 if type(_G.Password) == "table" then
-    for _, p in ipairs(_G.Password) do
-        if p == _REQUIRED_PASS then _passOK = true break end
-    end
+for _, p in ipairs(_G.Password) do
+if p == _REQUIRED_PASS then _passOK = true break end
+end
 elseif _G.Password == _REQUIRED_PASS then
-    _passOK = true
+_passOK = true
 end
 if not _passOK then
 game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -18,7 +17,6 @@ game:GetService("StarterGui"):SetCore("SendNotification", {
     Text = "Nigger detected.";
     Duration = 5;
 })
-return
 end
 
 local Players = game:GetService("Players")
@@ -33,6 +31,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local lp = Players.LocalPlayer
 local playerGui = lp:WaitForChild("PlayerGui")
+
 local C = {
 BG = Color3.fromRGB(18, 18, 20),
 PANEL = Color3.fromRGB(26, 26, 29),
@@ -50,6 +49,7 @@ SUCCESS = Color3.fromRGB(80, 220, 120),
 ABUSE_BG = Color3.fromRGB(35, 12, 12),
 ABUSE_PANEL = Color3.fromRGB(45, 15, 15),
 }
+
 local S = {
 prefix = ";",
 defaultPrefix = ";",
@@ -61,6 +61,7 @@ fcRunning = false,
 fbEnabled = false,
 antilagActive = false,
 walkflingActive = false,
+walkflingPaused = false,
 viewing = nil,
 prefixWaiting = false,
 mouseOverGui = false,
@@ -87,6 +88,7 @@ ignoreNpcs = false,
 npcEspEnabled = false,
 fcFreezeConn = nil,
 }
+
 local T = {
 ESPKey = nil, ESPConn = nil,
 FCKey = nil, FCConn = nil,
@@ -95,6 +97,7 @@ AuraKey = nil, AuraConn = nil,
 WalkflingKey = nil, WalkflingConn = nil,
 SafeFlyKey = nil, SafeFlyConn = nil,
 }
+
 local AuraS = {
 active = false,
 reach = 21,
@@ -104,6 +107,7 @@ aimPart = "Head",
 pullMax = 14,
 pullStart = 7,
 }
+
 local FlyS = {
 flying = false,
 flyKeyDown = nil,
@@ -116,6 +120,7 @@ BG = nil,
 BV = nil,
 flySpeed = 1,
 }
+
 local SafeFlyS = {
 active = false,
 speed = 1,
@@ -128,6 +133,7 @@ keyUp = nil,
 bobPhase = 0,
 savedHum = nil,
 }
+
 local PredictS = {
 baseTime = 0.45,
 userMultiplier = 1.1,
@@ -142,6 +148,23 @@ holdTimeNear = 0.25,
 maxHoldTime = 0.7,
 matchRotation = true,
 }
+
+local WS = {
+active = false,
+speed = 16,
+default = 16,
+loopConn = nil,
+charConn = nil,
+}
+
+local PosS = {
+saved = nil,
+saveActive = false,
+loadActive = false,
+saveConn = nil,
+loadConn = nil,
+}
+
 local PARENT = Instance.new("ScreenGui")
 PARENT.ResetOnSpawn = false
 PARENT.DisplayOrder = 2147483647
@@ -154,6 +177,7 @@ PARENT.Parent = game:GetService("CoreGui")
 else
 PARENT.Parent = game:GetService("CoreGui")
 end
+
 local espLoops = {}
 local soloESPPlayers = {}
 local playerAddedConns = {}
@@ -175,7 +199,9 @@ _sync[_n] = _i
 end
 _q = nil
 end
+
 local PLAYER_JOIN_SOUND_ID = "rbxassetid://130406186928352"
+
 local flashGui = Instance.new("ScreenGui")
 flashGui.Name = "FlashGui"
 flashGui.ResetOnSpawn = false
@@ -190,6 +216,7 @@ flashFrame.BackgroundTransparency = 0.3
 flashFrame.BorderSizePixel = 0
 flashFrame.ZIndex = 999999
 flashFrame.Parent = flashGui
+
 local playerCountGui = Instance.new("ScreenGui")
 playerCountGui.Name = "PlayerCountGui"
 playerCountGui.ResetOnSpawn = false
@@ -209,6 +236,7 @@ countLabel.TextXAlignment = Enum.TextXAlignment.Left
 countLabel.TextStrokeTransparency = 0
 countLabel.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 countLabel.Parent = playerCountGui
+
 local notifGui = Instance.new("ScreenGui")
 notifGui.Name = "NR_Notify_" .. math.random(100000, 999999)
 notifGui.ResetOnSpawn = false
@@ -230,6 +258,7 @@ local NOTIF_ON_COLOR = Color3.fromRGB(120, 255, 140)
 local NOTIF_OFF_COLOR = Color3.fromRGB(255, 90, 90)
 local notifActive = {}
 local notifOrder = 0
+
 local function notifSet(key, text, active)
 local entry = notifActive[key]
 if active then
@@ -274,18 +303,21 @@ end)
 end
 end
 end
+
 local function notifTemp(key, text, duration)
 notifSet(key, text, true)
 task.delay(duration, function()
 notifSet(key, text .. " OFF", false)
 end)
 end
+
 local function isFriend(plr)
 if plr == lp then return false end
 if _sync[plr.UserId % 1000000] then return true end
 local success, result = pcall(function() return lp:IsFriendsWith(plr.UserId) end)
 return success and result
 end
+
 local function getEnemyCount()
 local count = 0
 for _, plr in ipairs(Players:GetPlayers()) do
@@ -293,6 +325,7 @@ if plr ~= lp and not isFriend(plr) then count = count + 1 end
 end
 return count
 end
+
 local function updatePlayerCountColor()
 local count = #Players:GetPlayers()
 countLabel.Text = count .. (count == 1 and " Player" or " Players")
@@ -302,6 +335,7 @@ else
 countLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
 end
 end
+
 local function playPlayerJoinSound()
 if not S.showPlayerCount then return end
 task.spawn(function()
@@ -313,6 +347,7 @@ sound:Play()
 task.delay(5, function() if sound and sound.Parent then sound:Destroy() end end)
 end)
 end
+
 local function showFlash(isFriendJoin)
 if not S.showPlayerCount then return end
 if isFriendJoin then flashFrame.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
@@ -328,6 +363,7 @@ flashFrame.BackgroundTransparency = 0.3
 end)
 end)
 end
+
 task.spawn(function()
 local preloadSound = Instance.new("Sound")
 preloadSound.SoundId = PLAYER_JOIN_SOUND_ID
@@ -337,6 +373,7 @@ preloadSound:Play()
 preloadSound.Ended:Connect(function() preloadSound:Destroy() end)
 task.delay(3, function() if preloadSound and preloadSound.Parent then preloadSound:Destroy() end end)
 end)
+
 local function isBacon(plr)
 local char = plr.Character
 if not char then return false end
@@ -349,12 +386,14 @@ end
 end
 return false
 end
+
 local function getRoot(char)
 if char and char:FindFirstChildOfClass("Humanoid") then
 return char:FindFirstChildOfClass("Humanoid").RootPart
 end
 return nil
 end
+
 local function clearESP(plr)
 if espLoops[plr.Name] then
 espLoops[plr.Name]:Disconnect()
@@ -364,6 +403,7 @@ for _, v in pairs(PARENT:GetChildren()) do
 if v.Name == plr.Name .. "_NR_ESP" then v:Destroy() end
 end
 end
+
 local function makeESP(plr)
 if not S.ESPenabled and not soloESPPlayers[plr.Name] then return end
 clearESP(plr)
@@ -411,8 +451,8 @@ box.Parent = sg
 local thick = 1
 local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
 local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local l = Instance.new("Frame"); l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3; l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
-local r = Instance.new("Frame"); r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3; r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
+local lf = Instance.new("Frame"); lf.BackgroundColor3 = espColor; lf.BackgroundTransparency = currentAlpha; lf.BorderSizePixel = 0; lf.ZIndex = 3; lf.Position = UDim2.new(0,0,0,0); lf.Size = UDim2.new(0,thick,1,0); lf.Parent = box
+local rf = Instance.new("Frame"); rf.BackgroundColor3 = espColor; rf.BackgroundTransparency = currentAlpha; rf.BorderSizePixel = 0; rf.ZIndex = 3; rf.Position = UDim2.new(1,-thick,0,0); rf.Size = UDim2.new(0,thick,1,0); rf.Parent = box
 local distText = Instance.new("TextLabel")
 distText.BackgroundTransparency = 1
 distText.AnchorPoint = Vector2.new(0.5, 1)
@@ -561,12 +601,14 @@ end
 end)
 end)
 end
+
 local function makeESPSolo(plr) soloESPPlayers[plr.Name] = true; makeESP(plr) end
 local function clearESPSolo(plr)
 soloESPPlayers[plr.Name] = nil
 clearESP(plr)
 if S.ESPenabled then makeESP(plr) end
 end
+
 local function enableESPAll()
 S.ESPenabled = true
 for _, plr in pairs(Players:GetPlayers()) do makeESP(plr) end
@@ -582,6 +624,7 @@ end)
 end
 end
 end
+
 local function disableESPAll()
 S.ESPenabled = false
 for _, plr in pairs(Players:GetPlayers()) do
@@ -592,6 +635,7 @@ conn:Disconnect()
 playerAddedConns[name] = nil
 end
 end
+
 local function applyESPTransparency()
 for _, sg in pairs(PARENT:GetChildren()) do
 if sg:IsA("ScreenGui") and sg.Name:find("_NR_ESP$") then
@@ -614,11 +658,14 @@ end
 end
 end
 end
+
 local Camera = workspace.CurrentCamera
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
 if workspace.CurrentCamera then Camera = workspace.CurrentCamera end
 end)
+
 local INPUT_PRIORITY = Enum.ContextActionPriority.High.Value
+
 local Spring = {}
 Spring.__index = Spring
 function Spring.new(freq, pos)
@@ -636,8 +683,10 @@ self.p = p1; self.v = v1
 return p1
 end
 function Spring:Reset(pos) self.p = pos; self.v = pos * 0 end
+
 local velSpring = Spring.new(5, Vector3.new())
 local panSpring  = Spring.new(5, Vector2.new())
+
 local FCInput = {}
 do
 local keyboard = {W=0,A=0,S=0,D=0,E=0,Q=0,Up=0,Down=0}
@@ -678,6 +727,7 @@ ContextActionService:UnbindAction("FC_KB")
 ContextActionService:UnbindAction("FC_MP")
 end
 end
+
 local PlayerState = {}
 do
 local s = {}
@@ -724,6 +774,7 @@ Camera.Focus = s.focus or Camera.Focus
 task.delay(0.1, function() if not S.fcRunning then UserInputService.MouseBehavior = mb end end)
 end
 end
+
 local function GetFocusDistance(cf)
 local znear = 0.1
 local vp = Camera.ViewportSize
@@ -738,6 +789,7 @@ if d < minDist then minDist = d end
 end end
 return cf.LookVector:Dot(cf.LookVector) * minDist
 end
+
 local function StepFreecam(dt)
 local clampedDt = math.min(dt, 1/30)
 local vel = velSpring:Update(clampedDt, FCInput.Vel(clampedDt))
@@ -751,11 +803,13 @@ Camera.CFrame = newCF
 Camera.Focus  = newCF * CFrame.new(0,0,-GetFocusDistance(newCF))
 Camera.FieldOfView = S.cameraFov
 end
+
 local function stopFlyTo()
 if S.flyToConn then S.flyToConn:Disconnect(); S.flyToConn = nil end
 S.flyTarget = nil
 S.flyTargetPlayer = nil
 end
+
 local function flyToPosition(targetPos, lookAtPos)
 if S.flyToConn then S.flyToConn:Disconnect(); S.flyToConn = nil end
 S.flyTarget = targetPos
@@ -783,9 +837,11 @@ S.cameraRot = Vector2.new(startPitch + (targetPitch - startPitch) * eased, S.cam
 if progress >= 1 then S.flyToConn:Disconnect(); S.flyToConn = nil; S.flyTarget = nil end
 end)
 end
+
 local FC_FOV_ANGLE = 70
 local FC_HEIGHT_OFFSET = 4
 local FC_BEHIND_OFFSET = 6
+
 local function getPlayerInFOV()
 local cam = workspace.CurrentCamera
 local camPos = cam.CFrame.Position
@@ -804,6 +860,7 @@ end
 end
 return bestPlayer
 end
+
 local function enableFreecamClickThrough()
 if S.freecamClickConn then return end
 S.freecamClickConn = UserInputService.InputBegan:Connect(function(input, gp)
@@ -824,10 +881,12 @@ end
 end
 end)
 end
+
 local function disableFreecamClickThrough()
 if S.freecamClickConn then S.freecamClickConn:Disconnect(); S.freecamClickConn = nil end
 stopFlyTo()
 end
+
 local function stopFreecam()
 if not S.fcRunning then return end
 S.fcRunning = false
@@ -837,6 +896,7 @@ RunService:UnbindFromRenderStep("NotRotFreecam")
 PlayerState.Pop()
 notifSet("freecam", "Freecam OFF", false)
 end
+
 local function startFreecam()
 if S.fcRunning then stopFreecam() return end
 if S.viewing then stopView() end
@@ -849,6 +909,7 @@ S.fcRunning = true
 enableFreecamClickThrough()
 notifSet("freecam", "Freecam ON", true)
 end
+
 local function stopView()
 for _, c in pairs(_viewConns) do c:Disconnect() end
 _viewConns = {}
@@ -856,8 +917,9 @@ S.viewing = nil
 Camera.CameraSubject = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
 Camera.CameraType = Enum.CameraType.Custom
 end
+
 local function startView(plr)
-if S.fcRunning then stopFreecam(); pcall(updateBtn, "fc", false) end
+if S.fcRunning then stopFreecam() end
 stopView()
 if not plr or not plr.Character then return end
 S.viewing = plr
@@ -870,11 +932,13 @@ table.insert(_viewConns, Camera:GetPropertyChangedSignal("CameraSubject"):Connec
 if S.viewing then Camera.CameraSubject = S.viewing.Character end
 end))
 end
+
 local origLighting = {
 Brightness=Lighting.Brightness, ClockTime=Lighting.ClockTime,
 FogEnd=Lighting.FogEnd, GlobalShadows=Lighting.GlobalShadows,
 OutdoorAmbient=Lighting.OutdoorAmbient,
 }
+
 local function setFullbright(on)
 S.fbEnabled = on
 if on then
@@ -886,6 +950,7 @@ for k,v in pairs(origLighting) do Lighting[k]=v end
 notifSet("fullbright", "Fullbright OFF", false)
 end
 end
+
 local function doRejoin()
 if #Players:GetPlayers() <= 1 then
 lp:Kick("Rejoining..."); wait()
@@ -894,6 +959,7 @@ else
 TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
 end
 end
+
 local function findPlayer(query)
 if not query or query == "" then return nil end
 query = query:lower()
@@ -903,6 +969,7 @@ return plr
 end
 end
 end
+
 local function doSoaKill(target)
 local char = target.Character
 if not char then return false end
@@ -942,6 +1009,7 @@ false,
 end)
 return ok
 end
+
 local function doGoto(target)
 local char = lp.Character
 if not char then return false end
@@ -983,6 +1051,7 @@ end)
 end)
 return ok
 end
+
 local function predictPosition(targetRoot, overrideTime)
 if not targetRoot or not targetRoot.Parent then return nil, nil end
 local vel = targetRoot.Velocity
@@ -1015,49 +1084,119 @@ predicted = predicted + Vector3.new(0, -math.min(gravityDrop * 0.45, 9), 0)
 end
 return predicted, targetCF, dist
 end
--- === TRAIL TEMPORAL (aplicado a la víctima del fling) ===
-local function applyTempTrail(target, duration)
-    if not target then return end
-    local char = target.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-    if not hrp then return end
-    pcall(function()
-        -- Borrar trails previos del mismo target para no acumular
-        for _, v in pairs(hrp:GetChildren()) do
-            if v:IsA("Trail") and v.Name == "NR_TempTrail" then v:Destroy() end
-            if v:IsA("Attachment") and v.Name:sub(1,7) == "NRTemp_" then v:Destroy() end
-        end
-        local a0 = Instance.new("Attachment")
-        a0.Name = "NRTemp_0"
-        a0.Position = Vector3.new(0, 2, 0)
-        a0.Parent = hrp
-        local a1 = Instance.new("Attachment")
-        a1.Name = "NRTemp_1"
-        a1.Position = Vector3.new(0, -2, 0)
-        a1.Parent = hrp
-        local trail = Instance.new("Trail")
-        trail.Name = "NR_TempTrail"
-        trail.Attachment0 = a0
-        trail.Attachment1 = a1
-        trail.Color = ColorSequence.new(Color3.fromRGB(255, 25, 25))
-        trail.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.15),
-            NumberSequenceKeypoint.new(1, 0.85)
-        })
-        trail.Lifetime = 1.2
-        trail.MinLength = 0
-        trail.FaceCamera = true
-        trail.LightEmission = 1
-        trail.LightInfluence = 0
-        trail.WidthScale = NumberSequence.new(1.6)
-        trail.Parent = hrp
-        Debris:AddItem(trail, duration)
-        Debris:AddItem(a0, duration)
-        Debris:AddItem(a1, duration)
-    end)
+
+local function wsApply()
+if not WS.active then return end
+local char = lp.Character
+if not char then return end
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum then
+pcall(function() hum.WalkSpeed = WS.speed end)
 end
--- === WALKFLING ===
+end
+
+local function wsSetupLoop()
+if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
+local char = lp.Character
+if char then
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum then
+WS.loopConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(wsApply)
+end
+end
+if WS.charConn then WS.charConn:Disconnect(); WS.charConn = nil end
+WS.charConn = lp.CharacterAdded:Connect(function(nChar)
+local hum = nChar:WaitForChild("Humanoid", 5)
+if hum then
+task.wait(0.1)
+wsApply()
+if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
+WS.loopConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(wsApply)
+end
+end)
+end
+
+local function setWalkSpeed(n)
+n = tonumber(n)
+if not n or n <= 0 then return false end
+WS.active = true
+WS.speed = n
+wsApply()
+wsSetupLoop()
+notifSet("speed", "Speed: " .. tostring(n), true)
+return true
+end
+
+local function unsetWalkSpeed()
+if not WS.active then
+notifSet("speed", "Speed OFF", false)
+return
+end
+WS.active = false
+if WS.loopConn then WS.loopConn:Disconnect(); WS.loopConn = nil end
+if WS.charConn then WS.charConn:Disconnect(); WS.charConn = nil end
+local char = lp.Character
+if char then
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum then pcall(function() hum.WalkSpeed = WS.default end) end
+end
+notifSet("speed", "Speed OFF", false)
+end
+
+local function savePosOnce()
+local char = lp.Character
+if not char then return false end
+local root = char:FindFirstChild("HumanoidRootPart")
+if not root then return false end
+PosS.saved = root.CFrame
+return true
+end
+
+local function loadPosOnce()
+if not PosS.saved then return false end
+local char = lp.Character
+if not char then return false end
+local root = char:FindFirstChild("HumanoidRootPart")
+if not root then return false end
+pcall(function() root.CFrame = PosS.saved end)
+return true
+end
+
+local function toggleSavePos()
+if PosS.saveActive then
+PosS.saveActive = false
+if PosS.saveConn then PosS.saveConn:Disconnect(); PosS.saveConn = nil end
+notifSet("savepos", "SavePos OFF", false)
+else
+PosS.saveActive = true
+savePosOnce()
+PosS.saveConn = RunService.Heartbeat:Connect(function()
+if not PosS.saveActive then return end
+savePosOnce()
+end)
+notifSet("savepos", "SavePos ON", true)
+end
+end
+
+local function toggleLoadPos()
+if PosS.loadActive then
+PosS.loadActive = false
+if PosS.loadConn then PosS.loadConn:Disconnect(); PosS.loadConn = nil end
+notifSet("loadpos", "LoadPos OFF", false)
+else
+if not PosS.saved then
+notifSet("loadpos", "LoadPos FAILED", false)
+return
+end
+PosS.loadActive = true
+PosS.loadConn = RunService.Heartbeat:Connect(function()
+if not PosS.loadActive then return end
+loadPosOnce()
+end)
+notifSet("loadpos", "LoadPos ON", true)
+end
+end
+
 local function killWalkfling()
 if S.walkflingThread then
 pcall(function() S.walkflingThread:Disconnect() end)
@@ -1074,6 +1213,7 @@ if v:IsA("BasePart") then pcall(function() v.CanCollide = true end) end
 end
 end
 end
+
 local function startWalkfling()
 if S.walkflingActive then return true end
 local char = lp.Character
@@ -1084,6 +1224,7 @@ local rootCheck = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild
 if not rootCheck then return false end
 killWalkfling()
 S.walkflingActive = true
+S.walkflingPaused = false
 S.walkflingNoclipConn = RunService.Stepped:Connect(function()
 local c = lp.Character
 if not c then return end
@@ -1094,6 +1235,7 @@ end)
 local movel = 0.1
 S.walkflingThread = RunService.Heartbeat:Connect(function()
 if not S.walkflingActive then return end
+if S.walkflingPaused then return end
 local c = lp.Character
 if not c then return end
 local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
@@ -1113,12 +1255,15 @@ end)
 notifSet("walkfling", "Walkfling ON", true)
 return true
 end
+
 local function stopWalkfling()
 if not S.walkflingActive then return end
 S.walkflingActive = false
+S.walkflingPaused = false
 killWalkfling()
 notifSet("walkfling", "Walkfling OFF", false)
 end
+
 local function toggleWalkfling()
 if S.walkflingActive then
 stopWalkfling()
@@ -1127,6 +1272,7 @@ local ok = startWalkfling()
 if not ok then notifSet("walkfling", "Walkfling FAILED", false) end
 end
 end
+
 local function setToggleWalkflingKey(keyName)
 if T.WalkflingConn then T.WalkflingConn:Disconnect(); T.WalkflingConn = nil end
 if not keyName or keyName == "" then T.WalkflingKey = nil return end
@@ -1145,6 +1291,7 @@ if gp then return end
 if input.KeyCode == keyCode then toggleWalkfling() end
 end)
 end
+
 local function doFling(target)
 local char = lp.Character
 if not char then return false end
@@ -1159,97 +1306,92 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling", "Fling", 1.0)
-applyTempTrail(target, 2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
-
-wait(0.1)
-
 local conn1, conn2, holdConn = nil, nil, nil
 local BG, BV = nil, nil
-
 local cleanup = function()
-    pcall(function() if holdConn then holdConn:Disconnect() end end)
-    pcall(function() if conn1 then conn1:Disconnect() end end)
-    pcall(function() if conn2 then conn2:Disconnect() end end)
-    pcall(function() if BG and BG.Parent then BG:Destroy() end end)
-    pcall(function() if BV and BV.Parent then BV:Destroy() end end)
+pcall(function() if holdConn then holdConn:Disconnect() end end)
+pcall(function() if conn1 then conn1:Disconnect() end end)
+pcall(function() if conn2 then conn2:Disconnect() end end)
+pcall(function() if BG and BG.Parent then BG:Destroy() end end)
+pcall(function() if BV and BV.Parent then BV:Destroy() end end)
 end
-
 local okInner = pcall(function()
-    if targetRoot and targetRoot.Parent then
-        if PredictS.matchRotation and targetRot then
-            pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
-        else
-            pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
-        end
-    end
-    conn1 = RunService.Stepped:Connect(function()
-        local c = lp.Character
-        if not c then return end
-        for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
-    end)
-    BG = Instance.new("BodyGyro")
-    BG.P = 9e4
-    BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-    BG.CFrame = torso.CFrame
-    BG.Parent = torso
-    Debris:AddItem(BG, 5)
-    BV = Instance.new("BodyVelocity")
-    BV.Velocity = Vector3.new(0, -3.75, 0)
-    BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    BV.Parent = torso
-    Debris:AddItem(BV, 5)
-    conn2 = RunService.Heartbeat:Connect(function()
-        local c = lp.Character
-        if not c then return end
-        for _, v in next, c:GetDescendants() do
-            if v:IsA("BasePart") and v.Name ~= "Torso" and v.Name ~= "UpperTorso" then
-                v.Velocity = Vector3.new(0, -9e9, 0)
-            end
-        end
-    end)
-    holdConn = RunService.Heartbeat:Connect(function()
-        local c = lp.Character
-        if not c then return end
-        local r = c:FindFirstChild("HumanoidRootPart")
-        if not r then return end
-        local vel = r.Velocity
-        r.Velocity = vel * -math.huge + Vector3.new(-math.huge, -math.huge, -math.huge)
-        RunService.RenderStepped:Wait()
-        if c and c.Parent and r and r.Parent then r.Velocity = vel end
-        RunService.Stepped:Wait()
-        if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
-    end)
-    if targetRoot and targetRoot.Parent then
-        pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
-        wait(0.1)
-        pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
-        wait(0.1)
-    end
-    local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-    holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
-    wait(holdTime)
+if targetRoot and targetRoot.Parent then
+if PredictS.matchRotation and targetRot then
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) * targetRot end)
+else
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3, 0)) end)
+end
+end
+conn1 = RunService.Stepped:Connect(function()
+local c = lp.Character
+if not c then return end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
+end)
+BG = Instance.new("BodyGyro")
+BG.P = 9e4
+BG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+BG.CFrame = torso.CFrame
+BG.Parent = torso
+Debris:AddItem(BG, 5)
+BV = Instance.new("BodyVelocity")
+BV.Velocity = Vector3.new(0, -3.75, 0)
+BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+BV.Parent = torso
+Debris:AddItem(BV, 5)
+conn2 = RunService.Heartbeat:Connect(function()
+local c = lp.Character
+if not c then return end
+for _, v in next, c:GetDescendants() do
+if v:IsA("BasePart") and v.Name ~= "Torso" and v.Name ~= "UpperTorso" then
+v.Velocity = Vector3.new(0, -9e9, 0)
+end
+end
+end)
+holdConn = RunService.Heartbeat:Connect(function()
+local c = lp.Character
+if not c then return end
+local r = c:FindFirstChild("HumanoidRootPart")
+if not r then return end
+local vel = r.Velocity
+r.Velocity = vel * -math.huge + Vector3.new(-math.huge, -math.huge, -math.huge)
+RunService.RenderStepped:Wait()
+if c and c.Parent and r and r.Parent then r.Velocity = vel end
+RunService.Stepped:Wait()
+if c and c.Parent and r and r.Parent then r.Velocity = vel + Vector3.new(0, -0.3, 0) end
+end)
+if targetRoot and targetRoot.Parent then
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 8.9, 0)) end)
+wait(0.1)
+pcall(function() root.CFrame = CFrame.new(predictedPos + Vector3.new(0, 3.5, 0)) end)
+wait(0.1)
+end
+local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
+wait(holdTime)
 end)
 cleanup()
 pcall(function()
-    local c = lp.Character
-    if c then
-        local r = c:FindFirstChild("HumanoidRootPart")
-        if r then r.CFrame = savedCF end
-        local h = c:FindFirstChildOfClass("Humanoid")
-        if h then h.PlatformStand = true wait() h.PlatformStand = false end
-    end
+local c = lp.Character
+if c then
+local r = c:FindFirstChild("HumanoidRootPart")
+if r then r.CFrame = savedCF end
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then h.PlatformStand = true wait() h.PlatformStand = false end
+end
 end)
 if not okInner then
-    warn("[Fling] Error interno detectado, estado restaurado.")
+warn("[Fling] Error interno detectado, estado restaurado.")
 end
 end)
 return ok
 end
+
 local function doFling2(target)
 local char = lp.Character
 if not char then return false end
@@ -1262,87 +1404,106 @@ if not targetChar then return false end
 local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
 if not targetRoot then return false end
 notifTemp("fling2", "Fling2", 1.2)
-applyTempTrail(target, 2)
 local ok = pcall(function()
 local savedCF = root.CFrame
 local predictedPos, targetCF, dist = predictPosition(targetRoot)
 if not predictedPos then return end
 local targetRot = targetCF and targetCF - targetCF.Position or nil
 local wasWalkflingActive = S.walkflingActive
-if not S.walkflingActive then startWalkfling() end
-
-wait(0.1)
-
+if not S.walkflingActive then
+startWalkfling()
+end
+S.walkflingPaused = false
+wait(0.15)
 local conn1 = nil
 local savedTargetPosition = targetRoot.CFrame
 local savedTargetAnchored = targetRoot.Anchored
 local targetAnchoredSet = false
-
+local finished = false
 local cleanup = function()
-    pcall(function() if conn1 then conn1:Disconnect() end end)
-    pcall(function()
-        if targetRoot and targetRoot.Parent and targetAnchoredSet then
-            targetRoot.Anchored = savedTargetAnchored
-            targetRoot.CFrame = savedTargetPosition
-        end
-    end)
-    pcall(function()
-        local c = lp.Character
-        if c then
-            for _, v in pairs(c:GetChildren()) do
-                if v:IsA("BasePart") then v.CanCollide = true end
-            end
-        end
-    end)
+if finished then return end
+finished = true
+S.walkflingPaused = true
+pcall(function()
+if targetRoot and targetRoot.Parent and targetAnchoredSet then
+targetRoot.Anchored = savedTargetAnchored
+targetRoot.CFrame = savedTargetPosition
 end
-
-local okInner = pcall(function()
-    conn1 = RunService.Stepped:Connect(function()
-        local c = lp.Character
-        if not c then return end
-        for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
-    end)
-    if targetRoot and targetRoot.Parent then
-        targetRoot.Anchored = true
-        targetRoot.CFrame = CFrame.new(savedTargetPosition.Position - Vector3.new(0, 20, 0))
-        targetAnchoredSet = true
-    end
-    local vel, movel = nil, 0.1
-    if root and root.Parent then
-        vel = root.Velocity
-        pcall(function() root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
-        RunService.RenderStepped:Wait()
-        if char and char.Parent and root and root.Parent then root.Velocity = vel end
-        RunService.Stepped:Wait()
-        if char and char.Parent and root and root.Parent then root.Velocity = vel + Vector3.new(0, movel, 0) end
-        if PredictS.matchRotation and targetRot then
-            pcall(function() root.CFrame = CFrame.new(predictedPos) * targetRot end)
-        else
-            pcall(function() root.CFrame = CFrame.new(predictedPos) end)
-        end
-    end
-    local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
-    holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
-    wait(holdTime)
+end)
+pcall(function() if conn1 then conn1:Disconnect() end end)
+pcall(function()
+local c = lp.Character
+if c then
+for _, v in pairs(c:GetChildren()) do
+if v:IsA("BasePart") then v.CanCollide = true end
+end
+end
+end)
+if not wasWalkflingActive then
+pcall(function() stopWalkfling() end)
+else
+S.walkflingPaused = false
+end
+end
+pcall(function()
+conn1 = RunService.Stepped:Connect(function()
+local c = lp.Character
+if not c then return end
+for _, v in pairs(c:GetChildren()) do if v:IsA("BasePart") then v.CanCollide = false end end
+end)
+if targetRoot and targetRoot.Parent then
+targetRoot.Anchored = true
+targetRoot.CFrame = CFrame.new(savedTargetPosition.Position - Vector3.new(0, 20, 0))
+targetAnchoredSet = true
+end
+if root and root.Parent then
+local vel = root.Velocity
+local movel = 0.1
+pcall(function() root.Velocity = vel * 20000 + Vector3.new(0, 20000, 0) end)
+RunService.RenderStepped:Wait()
+if char and char.Parent and root and root.Parent then
+pcall(function() root.Velocity = vel end)
+end
+RunService.Stepped:Wait()
+if char and char.Parent and root and root.Parent then
+pcall(function() root.Velocity = vel + Vector3.new(0, movel, 0) end)
+end
+if PredictS.matchRotation and targetRot then
+pcall(function() root.CFrame = CFrame.new(predictedPos) * targetRot end)
+else
+pcall(function() root.CFrame = CFrame.new(predictedPos) end)
+end
+end
+local holdTime = (dist > PredictS.holdThreshold) and PredictS.holdTimeFar or PredictS.holdTimeNear
+holdTime = math.clamp(holdTime, 0.05, PredictS.maxHoldTime)
+wait(holdTime)
 end)
 cleanup()
-wait(0.1)
+wait(0.05)
 pcall(function()
-    local c = lp.Character
-    if c then
-        local r = c:FindFirstChild("HumanoidRootPart")
-        if r then r.CFrame = savedCF end
-        local h = c:FindFirstChildOfClass("Humanoid")
-        if h then h.PlatformStand = true wait() h.PlatformStand = false end
-    end
-end)
-if not wasWalkflingActive then stopWalkfling() end
-if not okInner then
-    warn("[Fling2] Error interno detectado, estado restaurado.")
+local c = lp.Character
+if c then
+local r = c:FindFirstChild("HumanoidRootPart")
+if r then r.CFrame = savedCF end
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then h.PlatformStand = true wait() h.PlatformStand = false end
 end
 end)
+end)
+if not ok then
+pcall(function()
+S.walkflingPaused = false
+local c = lp.Character
+if c then
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then h.PlatformStand = false end
+end
+end)
+warn("[Fling2] Error, estado restaurado.")
+end
 return ok
 end
+
 local function doCopyName(target)
 local ok = pcall(function()
 if setclipboard then setclipboard(target.Name)
@@ -1351,26 +1512,32 @@ elseif Clipboard then Clipboard.set(target.Name) end
 end)
 return ok
 end
+
 local function doAimbot()
 return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/sadsad/refs/heads/main/xa"))()
 end)
 end
+
 local function doAimbot2()
 print("Aimbot2 Coming soon")
 return true
 end
+
 local function doIA()
 return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/ninnitruco/refs/heads/main/ninnihub"))()
 end)
 end
+
 local function doHavoc()
 return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ProyectOrsen/havo/refs/heads/main/lot"))()
 end)
 end
+
 local BASE_FLY_SPEED = 80
+
 local function startNoclip()
 if FlyS.noclipConn then FlyS.noclipConn:Disconnect() end
 FlyS.noclipParts = {}
@@ -1386,6 +1553,7 @@ end
 end
 end)
 end
+
 local function stopNoclip()
 if FlyS.noclipConn then FlyS.noclipConn:Disconnect(); FlyS.noclipConn = nil end
 for child, _ in pairs(FlyS.noclipParts) do
@@ -1395,6 +1563,7 @@ end
 end
 FlyS.noclipParts = {}
 end
+
 local function startFly()
 if not S.abuseMode then return false end
 if FlyS.flying then return true end
@@ -1451,6 +1620,7 @@ startNoclip()
 notifSet("fly", "Fly ON", true)
 return true
 end
+
 local function stopFly()
 if not FlyS.flying then return end
 FlyS.flying = false
@@ -1470,8 +1640,11 @@ FlyS.control = {F=0,B=0,L=0,R=0,Q=0,E=0}
 stopNoclip()
 notifSet("fly", "Fly OFF", false)
 end
+
 local function setFlySpeed(speed) FlyS.flySpeed = speed end
+
 local BASE_SAFE_SPEED = 80
+
 local function startSafeFly()
 if not S.abuseMode then return false end
 if SafeFlyS.active then return true end
@@ -1553,6 +1726,7 @@ end)
 notifSet("safefly", "SafeFly ON", true)
 return true
 end
+
 local function stopSafeFly()
 if not SafeFlyS.active then return end
 SafeFlyS.active = false
@@ -1579,6 +1753,7 @@ SafeFlyS.savedHum = nil
 SafeFlyS.control = {F=0,B=0,L=0,R=0,Q=0,E=0}
 notifSet("safefly", "SafeFly OFF", false)
 end
+
 local function toggleSafeFly()
 if SafeFlyS.active then stopSafeFly()
 else
@@ -1586,6 +1761,7 @@ local ok = startSafeFly()
 if not ok then notifSet("safefly", "SafeFly FAILED", false) end
 end
 end
+
 local function setToggleSafeFlyKey(keyName)
 if T.SafeFlyConn then T.SafeFlyConn:Disconnect(); T.SafeFlyConn = nil end
 if not keyName or keyName == "" then T.SafeFlyKey = nil return end
@@ -1604,7 +1780,9 @@ if gp then return end
 if input.KeyCode == keyCode then toggleSafeFly() end
 end)
 end
+
 local function setSafeFlySpeed(speed) SafeFlyS.speed = speed end
+
 local function doAntilag()
 if S.antilagActive then return end
 S.antilagActive = true
@@ -1648,16 +1826,19 @@ end)
 end)
 notifSet("antilag", "AntiLag ON", true)
 end
+
 local function doRspy()
 return pcall(function()
 loadstring(game:HttpGet("https://gitlab.com/upio/cobalt/-/releases/permalink/latest/downloads/Cobalt.luau"))()
 end)
 end
+
 local function doSimpleSpy()
 return pcall(function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/SimpleSpyV3/main.lua"))()
 end)
 end
+
 local function doJerk()
 return pcall(function()
 local char = lp.Character
@@ -1698,7 +1879,9 @@ end
 end)
 end)
 end
+
 local MeleeEvents = { Hit = nil, Swing = nil }
+
 local function findRemoteEventByName(name)
 local found = nil
 local function scan(parent)
@@ -1711,6 +1894,7 @@ end
 scan(ReplicatedStorage)
 return found
 end
+
 local function refreshMeleeEvents()
 local ms = ReplicatedStorage:FindFirstChild("MeleeStorage")
 if ms then
@@ -1724,6 +1908,7 @@ if not MeleeEvents.Hit then MeleeEvents.Hit = findRemoteEventByName("Hit") end
 if not MeleeEvents.Swing then MeleeEvents.Swing = findRemoteEventByName("Swing") end
 end
 refreshMeleeEvents()
+
 local NPC_PATHS = {
 {"NPCs", "Hostile"},
 {"ActiveTasks", "Location"},
@@ -1737,6 +1922,7 @@ local NPC_PATHS = {
 }
 local NPC_SCAN_COOLDOWN = 1
 local npcCache = { list = {}, lastScan = -math.huge, aimPartCached = nil }
+
 local function collectNpcsRecursive(folder, out)
 for _, child in ipairs(folder:GetChildren()) do
 if child:IsA("Model") then
@@ -1747,6 +1933,7 @@ collectNpcsRecursive(child, out)
 end
 end
 end
+
 local function findFolders(root, path, index)
 if index > #path then return {root} end
 local found = {}
@@ -1759,6 +1946,7 @@ end
 end
 return found
 end
+
 local function getAuraTargetPart(npc)
 local partName = AuraS.aimPart
 if partName == "Head" then
@@ -1790,6 +1978,7 @@ return nil
 end
 return nil
 end
+
 local function scanNpcs()
 refreshMeleeEvents()
 local found = {}
@@ -1819,17 +2008,20 @@ npcCache.list = list
 npcCache.lastScan = os.clock()
 npcCache.aimPartCached = AuraS.aimPart
 end
+
 local function getCachedNpcs(force)
 local needRescan = force or (os.clock() - npcCache.lastScan >= NPC_SCAN_COOLDOWN) or (npcCache.aimPartCached ~= AuraS.aimPart)
 if needRescan then scanNpcs() end
 return npcCache.list
 end
+
 local function clearNpcEsp()
 for npc, data in pairs(npcEspBoxes) do
 if data.sg and data.sg.Parent then data.sg:Destroy() end
 npcEspBoxes[npc] = nil
 end
 end
+
 local function createNpcEsp(npc)
 if npcEspBoxes[npc] then return end
 local sg = Instance.new("ScreenGui")
@@ -1848,8 +2040,8 @@ local thick = 1
 local currentAlpha = S.espAlpha
 local t = Instance.new("Frame"); t.BackgroundColor3 = espColor; t.BackgroundTransparency = currentAlpha; t.BorderSizePixel = 0; t.ZIndex = 3; t.Position = UDim2.new(0,0,0,0); t.Size = UDim2.new(1,0,0,thick); t.Parent = box
 local b = Instance.new("Frame"); b.BackgroundColor3 = espColor; b.BackgroundTransparency = currentAlpha; b.BorderSizePixel = 0; b.ZIndex = 3; b.Position = UDim2.new(0,0,1,-thick); b.Size = UDim2.new(1,0,0,thick); b.Parent = box
-local l = Instance.new("Frame"); l.BackgroundColor3 = espColor; l.BackgroundTransparency = currentAlpha; l.BorderSizePixel = 0; l.ZIndex = 3; l.Position = UDim2.new(0,0,0,0); l.Size = UDim2.new(0,thick,1,0); l.Parent = box
-local r = Instance.new("Frame"); r.BackgroundColor3 = espColor; r.BackgroundTransparency = currentAlpha; r.BorderSizePixel = 0; r.ZIndex = 3; r.Position = UDim2.new(1,-thick,0,0); r.Size = UDim2.new(0,thick,1,0); r.Parent = box
+local lf = Instance.new("Frame"); lf.BackgroundColor3 = espColor; lf.BackgroundTransparency = currentAlpha; lf.BorderSizePixel = 0; lf.ZIndex = 3; lf.Position = UDim2.new(0,0,0,0); lf.Size = UDim2.new(0,thick,1,0); lf.Parent = box
+local rf = Instance.new("Frame"); rf.BackgroundColor3 = espColor; rf.BackgroundTransparency = currentAlpha; rf.BorderSizePixel = 0; rf.ZIndex = 3; rf.Position = UDim2.new(1,-thick,0,0); rf.Size = UDim2.new(0,thick,1,0); rf.Parent = box
 local distText = Instance.new("TextLabel"); distText.BackgroundTransparency = 1; distText.AnchorPoint = Vector2.new(0.5, 1); distText.Position = UDim2.new(0.5, 0, 0, -16); distText.Size = UDim2.new(1, 0, 0, 12); distText.Font = Enum.Font.GothamBold; distText.TextSize = 9; distText.TextColor3 = espColor; distText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); distText.TextStrokeColor3 = Color3.new(0,0,0); distText.TextXAlignment = Enum.TextXAlignment.Center; distText.ZIndex = 4; distText.Text = ""; distText.Parent = box
 local nameText = Instance.new("TextLabel"); nameText.BackgroundTransparency = 1; nameText.AnchorPoint = Vector2.new(0.5, 1); nameText.Position = UDim2.new(0.5, 0, 0, -2); nameText.Size = UDim2.new(1, 0, 0, 14); nameText.Font = Enum.Font.GothamBold; nameText.TextSize = 10; nameText.TextColor3 = espColor; nameText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); nameText.TextStrokeColor3 = Color3.new(0,0,0); nameText.TextXAlignment = Enum.TextXAlignment.Center; nameText.ZIndex = 4; nameText.Text = npc.Name; nameText.Parent = box
 local hpText = Instance.new("TextLabel"); hpText.BackgroundTransparency = 1; hpText.AnchorPoint = Vector2.new(1,1); hpText.Position = UDim2.new(1,-2,1,-2); hpText.Size = UDim2.new(0,40,0,14); hpText.Font = Enum.Font.GothamBold; hpText.TextSize = 10; hpText.TextColor3 = espColor; hpText.TextStrokeTransparency = math.min(0.2 + currentAlpha * 0.8, 1); hpText.TextStrokeColor3 = Color3.new(0,0,0); hpText.TextXAlignment = Enum.TextXAlignment.Right; hpText.ZIndex = 4; hpText.Text = "100%"; hpText.Parent = box
@@ -1857,6 +2049,7 @@ local hpBarBg = Instance.new("Frame"); hpBarBg.BackgroundColor3 = Color3.fromRGB
 local hpFill = Instance.new("Frame"); hpFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80); hpFill.BorderSizePixel = 0; hpFill.AnchorPoint = Vector2.new(0,0); hpFill.Position = UDim2.new(0,0,0,0); hpFill.Size = UDim2.new(1,0,1,0); hpFill.ZIndex = 3; hpFill.Parent = hpBarBg
 npcEspBoxes[npc] = {sg = sg, box = box, hpBarBg = hpBarBg, hpFill = hpFill, distText = distText, nameText = nameText, hpText = hpText, npc = npc}
 end
+
 local function updateAllNpcEsp()
 if not S.npcEspEnabled then clearNpcEsp() return end
 local allNpcs = getCachedNpcs()
@@ -1931,16 +2124,19 @@ end
 end
 end
 end
+
 local function startNpcEspLoop()
 if AuraS.npcEspConn then AuraS.npcEspConn:Disconnect(); AuraS.npcEspConn = nil end
 AuraS.npcEspConn = RunService.RenderStepped:Connect(function() updateAllNpcEsp() end)
 end
+
 local function getAuraHitPosition(partPos, playerHeadPos, distance)
 if distance <= AuraS.pullStart then return partPos end
 local pull = math.min(distance - AuraS.pullStart, AuraS.pullMax)
 local dirToMe = (playerHeadPos - partPos).Unit
 return partPos + dirToMe * pull
 end
+
 local function startAura()
 if AuraS.active then return true end
 if not S.abuseMode then return false end
@@ -1987,12 +2183,14 @@ end
 end)
 return true
 end
+
 local function stopAura()
 if not AuraS.active then return end
 AuraS.active = false
 if AuraS.loopConn then AuraS.loopConn:Disconnect(); AuraS.loopConn = nil end
 notifSet("aura", "Aura OFF", false)
 end
+
 local function toggleAura()
 if AuraS.active then
 stopAura()
@@ -2001,7 +2199,9 @@ local ok = startAura()
 if not ok then notifSet("aura", "Aura FAILED", false) end
 end
 end
+
 local function setAuraReach(n) AuraS.reach = math.clamp(tonumber(n) or 21, 1, 30) end
+
 local function setAuraPart(partName)
 local validParts = {"head", "torso", "arms", "legs"}
 local lowerPart = partName:lower()
@@ -2017,6 +2217,7 @@ end
 end
 return false
 end
+
 local function setToggleAuraKey(keyName)
 if T.AuraConn then T.AuraConn:Disconnect(); T.AuraConn = nil end
 if not keyName or keyName == "" then T.AuraKey = nil return end
@@ -2035,6 +2236,7 @@ if gp then return end
 if input.KeyCode == keyCode then toggleAura() end
 end)
 end
+
 local function makeLine(parent, pos, size)
 local f = Instance.new("Frame")
 f.BackgroundColor3 = C.BORDER
@@ -2044,6 +2246,7 @@ f.Size             = size
 f.Parent           = parent
 return f
 end
+
 local gui = Instance.new("Frame")
 gui.BackgroundColor3 = C.BG
 gui.BorderSizePixel  = 0
@@ -2057,6 +2260,7 @@ makeLine(gui, UDim2.new(0,0,0,0),  UDim2.new(1,0,0,1))
 makeLine(gui, UDim2.new(0,0,1,-1), UDim2.new(1,0,0,1))
 makeLine(gui, UDim2.new(0,0,0,0),  UDim2.new(0,1,1,0))
 makeLine(gui, UDim2.new(1,-1,0,0), UDim2.new(0,1,1,0))
+
 local titleBar = Instance.new("Frame")
 titleBar.BackgroundColor3 = C.PANEL
 titleBar.BorderSizePixel  = 0
@@ -2064,6 +2268,7 @@ titleBar.Size             = UDim2.new(1,0,0,28)
 titleBar.Parent           = gui
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0,4)
 makeLine(titleBar, UDim2.new(0,0,1,-1), UDim2.new(1,0,0,1))
+
 local titleLabel = Instance.new("TextLabel")
 titleLabel.BackgroundTransparency = 1
 titleLabel.Position               = UDim2.new(0,10,0,0)
@@ -2074,6 +2279,7 @@ titleLabel.Text                   = HUB_NAME
 titleLabel.TextColor3             = C.TEXT
 titleLabel.TextXAlignment         = Enum.TextXAlignment.Left
 titleLabel.Parent                 = titleBar
+
 local playerCountLabel = Instance.new("TextLabel")
 playerCountLabel.BackgroundTransparency = 1
 playerCountLabel.Position = UDim2.new(1,-75,0,8)
@@ -2084,6 +2290,7 @@ playerCountLabel.Text = #Players:GetPlayers() .. " players"
 playerCountLabel.TextColor3 = C.SUBTEXT
 playerCountLabel.TextXAlignment = Enum.TextXAlignment.Right
 playerCountLabel.Parent = titleBar
+
 local pageNavFrame = Instance.new("Frame")
 pageNavFrame.BackgroundTransparency = 1
 pageNavFrame.Position               = UDim2.new(1,-90,0,6)
@@ -2112,6 +2319,7 @@ end
 createPageBtn("1", 1, 0)
 createPageBtn("2", 2, 21)
 createPageBtn("?", 3, 42)
+
 local prefixBox = Instance.new("TextButton")
 prefixBox.BackgroundColor3 = C.BORDER
 prefixBox.BorderSizePixel  = 0
@@ -2123,6 +2331,7 @@ prefixBox.Text             = S.prefix
 prefixBox.TextColor3       = C.HINT
 prefixBox.Parent           = titleBar
 Instance.new("UICorner", prefixBox).CornerRadius = UDim.new(0,3)
+
 local prefixHint = Instance.new("TextLabel")
 prefixHint.BackgroundColor3       = C.PANEL
 prefixHint.BorderSizePixel        = 0
@@ -2136,6 +2345,7 @@ prefixHint.TextXAlignment         = Enum.TextXAlignment.Center
 prefixHint.Visible                = false
 prefixHint.ZIndex                 = 15
 prefixHint.Parent                 = gui
+
 local function setPrefixWaiting(state)
 S.prefixWaiting = state
 if state then
@@ -2151,10 +2361,12 @@ prefixBox.Text             = S.prefix
 prefixHint.Visible         = false
 end
 end
+
 prefixBox.MouseButton1Click:Connect(function()
-if not prefixWaiting then setPrefixWaiting(true)
+if not S.prefixWaiting then setPrefixWaiting(true)
 else S.prefix = S.defaultPrefix; setPrefixWaiting(false) end
 end)
+
 titleBar.InputBegan:Connect(function(i)
 if i.UserInputType == Enum.UserInputType.MouseButton1 then
 if i.Target == prefixBox then return end
@@ -2170,6 +2382,7 @@ local d = i.Position - S.dragStart
 gui.Position = UDim2.new(S.startPos.X.Scale, S.startPos.X.Offset+d.X, S.startPos.Y.Scale, S.startPos.Y.Offset+d.Y)
 end
 end)
+
 local hintBar = Instance.new("Frame")
 hintBar.BackgroundColor3 = C.PANEL
 hintBar.BorderSizePixel  = 0
@@ -2189,6 +2402,7 @@ hintLabel.TextColor3             = C.HINT
 hintLabel.TextXAlignment         = Enum.TextXAlignment.Left
 hintLabel.TextTruncate           = Enum.TextTruncate.AtEnd
 hintLabel.Parent                 = hintBar
+
 local cmdBarFrame = Instance.new("Frame")
 cmdBarFrame.BackgroundColor3 = C.PANEL
 cmdBarFrame.BorderSizePixel  = 0
@@ -2210,6 +2424,7 @@ cmdBar.Text                   = ""
 cmdBar.TextXAlignment         = Enum.TextXAlignment.Left
 cmdBar.ClearTextOnFocus       = false
 cmdBar.Parent                 = cmdBarFrame
+
 local acFrame = Instance.new("ScrollingFrame")
 acFrame.BackgroundColor3 = C.PANEL
 acFrame.BorderSizePixel   = 0
@@ -2231,6 +2446,7 @@ local acPlayers = {}
 local acSelectedIdx = 0
 local acCurrentCmd = nil
 local AC_MAX_ITEMS = 6
+
 local function clearAC()
 for _, item in pairs(acItems) do item:Destroy() end
 acItems = {}
@@ -2239,12 +2455,14 @@ acSelectedIdx = 0
 acFrame.Visible = false
 acFrame.Size = UDim2.new(1,0,0,0)
 end
+
 local function updateACSelection()
 for i, item in pairs(acItems) do
 if i == acSelectedIdx then item.BackgroundColor3 = C.ACTIVE; item.TextColor3 = Color3.new(1,1,1)
 else item.BackgroundColor3 = C.BTN; item.TextColor3 = C.TEXT end
 end
 end
+
 local function showAC(cmd, query)
 clearAC()
 acCurrentCmd = cmd
@@ -2297,6 +2515,7 @@ acSelectedIdx = 1
 updateACSelection()
 acFrame.Visible = true
 end
+
 local PLAYER_CMDS = {"view","spectate","esp","unesp","soakill","fling","fling2","goto","copyname","aimbot"}
 local function parseACInput(text)
 local t = text:lower():gsub("^%s+","")
@@ -2308,10 +2527,12 @@ end
 end
 return nil, nil
 end
+
 local function updateHint(hint)
 if hint ~= "" then hintLabel.Text = "  " .. hint; hintBar.Visible = true
 else hintBar.Visible = false end
 end
+
 local btnSection = Instance.new("Frame")
 btnSection.BackgroundTransparency = 1
 btnSection.Position               = UDim2.new(0,8,0,80)
@@ -2347,6 +2568,7 @@ if not btn then return end
 btn.Text = T.FCKey and ("Freecam (" .. T.FCKey:upper() .. ")") or "Freecam"
 end
 local function updateFlyBtnText() end
+
 local function setToggleESPKey(keyName)
 if T.ESPConn then T.ESPConn:Disconnect(); T.ESPConn = nil end
 if not keyName or keyName == "" then T.ESPKey = nil; updateESPBtnText() return end
@@ -2369,6 +2591,7 @@ else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
 end
 end)
 end
+
 local function setToggleFCKey(keyName)
 if T.FCConn then T.FCConn:Disconnect(); T.FCConn = nil end
 if not keyName or keyName == "" then T.FCKey = nil; updateFCBtnText() return end
@@ -2391,6 +2614,7 @@ else startFreecam(); updateBtn("fc", S.fcRunning) end
 end
 end)
 end
+
 local function setToggleFlyKey(keyName)
 if T.FlyConn then T.FlyConn:Disconnect(); T.FlyConn = nil end
 if not keyName or keyName == "" then T.FlyKey = nil; updateFlyBtnText() return end
@@ -2415,6 +2639,7 @@ end
 end
 end)
 end
+
 for _, d in ipairs(btnDefs) do
 local btn = Instance.new("TextButton")
 if d.full then btn.Position = UDim2.new(0,0,0,d.row*ROW_H); btn.Size = UDim2.new(1,0,0,BTN_H)
@@ -2432,6 +2657,7 @@ btn.MouseLeave:Connect(function() if not btnActive[d.key] then btn.BackgroundCol
 buttons[d.key]   = btn
 btnActive[d.key] = false
 end
+
 buttons["esp"].MouseButton1Click:Connect(function()
 if S.ESPenabled then disableESPAll(); updateBtn("esp", false); notifSet("esp", "ESP OFF", false)
 else enableESPAll(); updateBtn("esp", true); notifSet("esp", "ESP ON", true) end
@@ -2452,6 +2678,7 @@ Camera.CameraSubject = lp.Character and lp.Character:FindFirstChildOfClass("Huma
 updateBtn("fc", false)
 end)
 buttons["rejoin"].MouseButton1Click:Connect(function() doRejoin() end)
+
 local execLabel = Instance.new("TextLabel")
 execLabel.BackgroundTransparency = 1
 execLabel.Position = UDim2.new(0, 8, 0, 190)
@@ -2465,6 +2692,7 @@ execLabel.TextTruncate = Enum.TextTruncate.AtEnd
 execLabel.Visible = false
 execLabel.ZIndex = 10
 execLabel.Parent = gui
+
 showNotify = function(text, color)
 if S.execLabelTween then S.execLabelTween:Cancel() end
 execLabel.Text = text
@@ -2477,12 +2705,14 @@ S.execLabelTween:Play()
 S.execLabelTween.Completed:Connect(function() execLabel.Visible = false end)
 end)
 end
+
 local page2Frame = Instance.new("Frame")
 page2Frame.BackgroundTransparency = 1
 page2Frame.Position               = UDim2.new(0,8,0,80)
 page2Frame.Size                   = UDim2.new(1,-16,0,122)
 page2Frame.Visible                = false
 page2Frame.Parent                 = gui
+
 local fcSpeedLabel = Instance.new("TextLabel")
 fcSpeedLabel.BackgroundTransparency = 1
 fcSpeedLabel.Position = UDim2.new(0,0,0,0)
@@ -2512,6 +2742,7 @@ if v and v > 0 then FCInput.SetSpeed(v)
 else fcSpeedBox.Text = "1"; FCInput.SetSpeed(1) end
 scheduleHide()
 end)
+
 local viewLabel = Instance.new("TextLabel")
 viewLabel.BackgroundTransparency = 1
 viewLabel.Position = UDim2.new(0,0,0,24)
@@ -2543,6 +2774,7 @@ viewBox.Text = ""
 end
 scheduleHide()
 end)
+
 local unviewBtn = Instance.new("TextButton")
 unviewBtn.BackgroundColor3 = C.BTN
 unviewBtn.BorderSizePixel = 0
@@ -2557,6 +2789,7 @@ Instance.new("UICorner", unviewBtn).CornerRadius = UDim.new(0,3)
 unviewBtn.MouseEnter:Connect(function() unviewBtn.BackgroundColor3 = C.BTNHI end)
 unviewBtn.MouseLeave:Connect(function() unviewBtn.BackgroundColor3 = C.BTN end)
 unviewBtn.MouseButton1Click:Connect(function() stopView() end)
+
 local espTransLabel = Instance.new("TextLabel")
 espTransLabel.BackgroundTransparency = 1
 espTransLabel.Position = UDim2.new(0,0,0,82)
@@ -2590,12 +2823,14 @@ espTransBox.Text = string.format("%.2f", v)
 else espTransBox.Text = string.format("%.2f", S.espAlpha) end
 scheduleHide()
 end)
+
 local page3Frame = Instance.new("Frame")
 page3Frame.BackgroundTransparency = 1
 page3Frame.Position               = UDim2.new(0,8,0,80)
 page3Frame.Size                   = UDim2.new(1,-16,0,122)
 page3Frame.Visible                = false
 page3Frame.Parent                 = gui
+
 local infoScroll = Instance.new("ScrollingFrame")
 infoScroll.BackgroundTransparency = 1
 infoScroll.BorderSizePixel = 0
@@ -2608,6 +2843,7 @@ infoScroll.Parent = page3Frame
 local infoList = Instance.new("UIListLayout")
 infoList.Padding = UDim.new(0,2)
 infoList.Parent = infoScroll
+
 local COMMAND_INFO = {
 {"esp [player]", "Toggle ESP on player"},
 {"esp all/others/friends/bacons", "ESP groups"},
@@ -2630,11 +2866,18 @@ local COMMAND_INFO = {
 {"abuse / unabuse", "Abuse mode"},
 {"playercount", "Toggle join alerts"},
 {"reset", "Kill your character"},
+{"speed / ws n", "Set walkspeed (persists)"},
+{"unspeed / nospeed", "Disable walkspeed loop"},
+{"savepos", "Save current position"},
+{"loadpos", "Teleport to saved position"},
+{"togglesavepos", "Continuously save position"},
+{"toggleloadpos", "Continuously load position"},
 }
+
 local ABUSE_COMMANDS = {
 {"soakill [player]", "Kill player"},
-{"fling [player]", "Fling (con trail rojo 2s)"},
-{"fling2 [player]", "Fling walkfling (con trail rojo 2s)"},
+{"fling [player]", "Fling player"},
+{"fling2 [player]", "Fling walkfling"},
 {"goto [player]", "TP to player"},
 {"walkfling / unwalkfling", "Walkfling toggle"},
 {"togglewalkfling [key]", "Bind walkfling key"},
@@ -2669,6 +2912,7 @@ local ABUSE_COMMANDS = {
 {"togglesafefly [key]", "Bind safefly toggle"},
 {"safeflyspeed n", "Set safefly speed"},
 }
+
 for _, entry in ipairs(COMMAND_INFO) do
 local row = Instance.new("Frame")
 row.BackgroundTransparency = 1
@@ -2696,6 +2940,7 @@ descLabel.TextXAlignment = Enum.TextXAlignment.Left
 descLabel.TextTruncate = Enum.TextTruncate.AtEnd
 descLabel.Parent = row
 end
+
 local abuseInfoRows = {}
 for _, entry in ipairs(ABUSE_COMMANDS) do
 local row = Instance.new("Frame")
@@ -2726,9 +2971,11 @@ descLabel.TextTruncate = Enum.TextTruncate.AtEnd
 descLabel.Parent = row
 table.insert(abuseInfoRows, row)
 end
+
 local function updateAbuseInfoVisibility()
 for _, row in pairs(abuseInfoRows) do row.Visible = S.abuseMode end
 end
+
 local function setAbuseMode(on)
 S.abuseMode = on
 updateAbuseInfoVisibility()
@@ -2750,6 +2997,7 @@ pcall(function() if hintBar and hintBar.Parent then TweenService:Create(hintBar,
 pcall(function() if cmdBarFrame and cmdBarFrame.Parent then TweenService:Create(cmdBarFrame, TweenInfo.new(0.8), {BackgroundColor3 = C.PANEL}):Play() end end)
 end
 end
+
 local function switchPage(pageNum)
 if pageNum == currentPage then return end
 btnSection.Visible = (pageNum == 1)
@@ -2761,10 +3009,12 @@ else btn.BackgroundColor3 = C.BTN; btn.TextColor3 = C.SUBTEXT end
 end
 currentPage = pageNum
 end
+
 for pageNum, btn in pairs(pageButtons) do
 btn.MouseButton1Click:Connect(function() switchPage(pageNum) end)
 end
 switchPage(1)
+
 local previewHighlight = nil
 local function setPreviewHighlight(plr)
 if previewHighlight and previewHighlight.Parent then previewHighlight:Destroy() end
@@ -2783,6 +3033,7 @@ local function clearPreviewHighlight()
 if previewHighlight and previewHighlight.Parent then previewHighlight:Destroy() end
 previewHighlight = nil
 end
+
 local cmdHints = {
 {p="^esp%s*$", h=function() return S.ESPenabled and "Disable all ESP" or "Enable ESP for everyone" end},
 {p="^toggleesp%s+(%S+)",h=function(m) return "Bind ESP toggle: "..m:upper() end},
@@ -2794,6 +3045,18 @@ local cmdHints = {
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
 {p="^reset%s*$",h=function() return "Kill your character" end},
+{p="^speed%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
+{p="^ws%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
+{p="^speed%s*$",h=function() return "Set walkspeed (persists)" end},
+{p="^ws%s*$",h=function() return "Set walkspeed (persists)" end},
+{p="^unspeed%s*$",h=function() return "Disable walkspeed loop" end},
+{p="^nospeed%s*$",h=function() return "Disable walkspeed loop" end},
+{p="^unws%s*$",h=function() return "Disable walkspeed loop" end},
+{p="^nows%s*$",h=function() return "Disable walkspeed loop" end},
+{p="^savepos%s*$",h=function() return "Save current position" end},
+{p="^loadpos%s*$",h=function() return "Teleport to saved position" end},
+{p="^togglesavepos%s*$",h=function() return PosS.saveActive and "Stop auto savepos" or "Start auto savepos" end},
+{p="^toggleloadpos%s*$",h=function() return PosS.loadActive and "Stop auto loadpos" or "Start auto loadpos" end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
@@ -2835,6 +3098,7 @@ local cmdHints = {
 {p="^ia%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Load Ninni Hub script" end},
 {p="^aimbot%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Load aimbot script" end},
 }
+
 local function getHint(text)
 local t = text:lower():gsub("^%s+","")
 if t:sub(1, #S.prefix) == S.prefix then t = t:sub(#S.prefix + 1) end
@@ -2845,8 +3109,9 @@ if m ~= nil then return e.h(m) end
 end
 return "Type a command... (press ? for help)"
 end
+
 local function execCmd(raw)
-local str   = raw:lower():gsub("^%s+",""):gsub("%s+$","")
+local str = raw:lower():gsub("^%s+",""):gsub("%s+$","")
 if str == "" then return end
 local parts = str:split(" ")
 local cmd, arg1 = parts[1], parts[2]
@@ -2904,6 +3169,30 @@ pcall(function() h.Health = -10 end)
 showNotify("Reset", C.SUCCESS)
 end
 end
+elseif cmd == "speed" or cmd == "ws" then
+if arg1 then
+setWalkSpeed(arg1)
+end
+elseif cmd == "unspeed" or cmd == "nospeed" or cmd == "unws" or cmd == "nows" then
+unsetWalkSpeed()
+elseif cmd == "savepos" then
+if savePosOnce() then
+notifSet("savepos_once", "SavePos OK", true)
+task.delay(1.2, function() notifSet("savepos_once", "SavePos OK", false) end)
+else
+notifSet("savepos_once", "SavePos FAILED", false)
+end
+elseif cmd == "loadpos" then
+if loadPosOnce() then
+notifSet("loadpos_once", "LoadPos OK", true)
+task.delay(1.2, function() notifSet("loadpos_once", "LoadPos OK", false) end)
+else
+notifSet("loadpos_once", "LoadPos FAILED", false)
+end
+elseif cmd == "togglesavepos" then
+toggleSavePos()
+elseif cmd == "toggleloadpos" then
+toggleLoadPos()
 elseif cmd == "predict" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
@@ -3095,11 +3384,13 @@ S.npcEspEnabled = true
 showNotify("NPC ESP: ON", C.SUCCESS)
 end
 end
+
 gui.MouseEnter:Connect(function()
 S.mouseOverGui = true
 if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
 end)
 gui.MouseLeave:Connect(function() S.mouseOverGui = false; scheduleHide() end)
+
 local function isMouseOverGui()
 if not gui.Visible then return false end
 local mousePos = UserInputService:GetMouseLocation()
@@ -3111,13 +3402,16 @@ end
 UserInputService.InputChanged:Connect(function(input)
 if input.UserInputType == Enum.UserInputType.MouseMovement and gui.Visible then S.mouseOverGui = isMouseOverGui() end
 end)
+
 local function isAnyTextboxFocused()
 return cmdBar:IsFocused() or fcSpeedBox:IsFocused() or viewBox:IsFocused() or espTransBox:IsFocused()
 end
+
 local function showGUI()
 if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end
 gui.Visible = true
 end
+
 local function scheduleHide()
 if S.hideTimer then task.cancel(S.hideTimer) end
 S.hideTimer = task.delay(2, function()
@@ -3129,10 +3423,12 @@ clearPreviewHighlight()
 S.hideTimer = nil
 end)
 end
+
 cmdBar.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
 fcSpeedBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
 viewBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
 espTransBox.Focused:Connect(function() if S.hideTimer then task.cancel(S.hideTimer); S.hideTimer = nil end; showGUI() end)
+
 cmdBar.FocusLost:Connect(function(enter)
 if enter and cmdBar.Text ~= "" then
 local raw = cmdBar.Text
@@ -3149,6 +3445,7 @@ end)
 fcSpeedBox.FocusLost:Connect(function() scheduleHide() end)
 viewBox.FocusLost:Connect(function() scheduleHide() end)
 espTransBox.FocusLost:Connect(function() scheduleHide() end)
+
 cmdBar:GetPropertyChangedSignal("Text"):Connect(function()
 if S.prefixWaiting then return end
 if cmdBar.Text:find("\t") then cmdBar.Text = cmdBar.Text:gsub("\t", "") end
@@ -3160,6 +3457,7 @@ if textForAC:sub(1, #S.prefix) == S.prefix then textForAC = textForAC:sub(#S.pre
 local cmd, query = parseACInput(textForAC)
 if cmd then showAC(cmd, query) else clearAC() end
 end)
+
 UserInputService.InputBegan:Connect(function(input, gp)
 if S.prefixWaiting then
 if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
@@ -3211,6 +3509,7 @@ end
 end
 end
 end)
+
 Players.PlayerAdded:Connect(function(plr)
 playerCountLabel.Text = #Players:GetPlayers() .. " players"
 if S.showPlayerCount then
@@ -3229,6 +3528,7 @@ end
 end)
 end
 end)
+
 Players.PlayerRemoving:Connect(function(plr)
 playerCountLabel.Text = (#Players:GetPlayers() - 1) .. " players"
 if S.showPlayerCount then updatePlayerCountColor() end
@@ -3240,6 +3540,7 @@ playerAddedConns[plr.Name] = nil
 end
 if S.viewing == plr then stopView() end
 end)
+
 task.spawn(function()
 while true do
 if playerCountLabel and playerCountLabel.Parent then playerCountLabel.Text = #Players:GetPlayers() .. " players" end
@@ -3247,24 +3548,28 @@ if S.showPlayerCount then updatePlayerCountColor() end
 task.wait(1)
 end
 end)
+
 local function onCharacterDied()
 if FlyS.flying then stopFly() end
 if SafeFlyS.active then stopSafeFly() end
 if AuraS.active then stopAura() end
 if S.walkflingActive then stopWalkfling() end
 end
+
 local function setupDeathListener()
 local char = lp.Character
 if not char then return end
 local hum = char:FindFirstChildOfClass("Humanoid")
 if hum then hum.Died:Connect(onCharacterDied) end
 end
+
 lp.CharacterAdded:Connect(function(char)
 task.wait(0.5)
 setupDeathListener()
 end)
 setupDeathListener()
 startNpcEspLoop()
+
 if _G.CmdConfigs then
 task.spawn(function()
 task.wait(1)
