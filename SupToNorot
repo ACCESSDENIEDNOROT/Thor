@@ -1,8 +1,10 @@
-local VERSION = "2.2.5"
+local VERSION = "2.2.8"
 local HUB_NAME = "NotRot Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
-local _REQUIRED_PASS = "NKR24GKKXKLXDD"
+local function __RUN__()
+
+local _REQUIRED_PASS = "DEF38KINFOTHOR_key"
 local _passOK = false
 if type(_G.Password) == "table" then
 for _, p in ipairs(_G.Password) do
@@ -17,6 +19,7 @@ game:GetService("StarterGui"):SetCore("SendNotification", {
     Text = "Nigger detected.";
     Duration = 5;
 })
+return
 end
 
 local M = {}
@@ -126,13 +129,14 @@ G.notifGui = Instance.new("ScreenGui")
 G.notifGui.Name = "NR_Notify_" .. math.random(100000, 999999)
 G.notifGui.ResetOnSpawn = false
 G.notifGui.IgnoreGuiInset = true
-G.notifGui.DisplayOrder = 999997
+G.notifGui.DisplayOrder = 2147483647
 G.notifGui.Parent = M.playerGui
 G.notifBox = Instance.new("Frame")
 G.notifBox.BackgroundTransparency = 1
 G.notifBox.AnchorPoint = Vector2.new(0, 1)
 G.notifBox.Position = UDim2.new(0, 12, 1, -12)
 G.notifBox.Size = UDim2.new(0, 420, 0, 240)
+G.notifBox.ZIndex = 10000
 G.notifBox.Parent = G.notifGui
 local notifLayout = Instance.new("UIListLayout")
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -140,7 +144,7 @@ notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 notifLayout.Padding = UDim.new(0, 2)
 notifLayout.Parent = G.notifBox
 
-local NOTIF_ON_COLOR = Color3.fromRGB(120, 255, 140)
+local NOTIF_ON_COLOR = Color3.fromRGB(80, 170, 255)
 local NOTIF_OFF_COLOR = Color3.fromRGB(255, 90, 90)
 local notifActive = {}
 local notifOrder = 0
@@ -190,6 +194,7 @@ label.Font = Enum.Font.GothamSemibold
 label.TextXAlignment = Enum.TextXAlignment.Left
 label.Size = UDim2.new(1, 0, 0, 14)
 label.TextTransparency = 1
+label.ZIndex = 10000
 label.LayoutOrder = -notifOrder
 label.Parent = G.notifBox
 M.TweenService:Create(label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
@@ -2430,7 +2435,7 @@ local COMMAND_INFO = {
 {"copyname [player]", "Copy name"},
 {"antilag / boostfps", "Reduce graphics"},
 {"abuse / unabuse", "Abuse mode"},
-{"playercount", "Toggle join alerts"},
+{"playercount / pcount / toggleplayercount", "Toggle join alerts"},
 {"reset", "Kill your character"},
 {"speed / ws n", "Set walkspeed (persists)"},
 {"unspeed / nospeed / unws / nows", "Disable walkspeed"},
@@ -2623,6 +2628,9 @@ local cmdHints = {
 {p="^loadpos%s*$",h=function() return "Teleport to saved position" end},
 {p="^togglesavepos%s*$",h=function() return PosS.saveActive and "Stop auto savepos" or "Start auto savepos" end},
 {p="^toggleloadpos%s*$",h=function() return PosS.loadActive and "Stop auto loadpos" or "Start auto loadpos" end},
+{p="^playercount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
+{p="^pcount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
+{p="^toggleplayercount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
@@ -2835,7 +2843,7 @@ if not S.abuseMode then return end
 if SafeFlyS.active then stopSafeFly() else local ok = startSafeFly(); if not ok then notifSet("safefly", "SafeFly FAILED", false) end end
 elseif cmd == "unsafefly" or cmd == "nosafefly" then if not S.abuseMode then return end; if SafeFlyS.active then stopSafeFly() end
 elseif cmd == "safeflyspeed" or cmd == "safefs" then if not S.abuseMode then return end; local v = tonumber(arg1); if v and v > 0 then setSafeFlySpeed(v) end
-elseif cmd == "playercount" or cmd == "pcount" then
+elseif cmd == "playercount" or cmd == "pcount" or cmd == "toggleplayercount" then
 S.showPlayerCount = not S.showPlayerCount
 G.playerCountGui.Enabled = S.showPlayerCount
 updatePlayerCountColor()
@@ -3024,3 +3032,6 @@ task.wait(0.1)
 end
 end)
 end
+
+end
+__RUN__()
