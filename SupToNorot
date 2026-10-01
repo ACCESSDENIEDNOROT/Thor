@@ -971,7 +971,24 @@ local function killWalkfling()
 if S.walkflingThread then pcall(function() S.walkflingThread:Disconnect() end); S.walkflingThread = nil end
 if S.walkflingNoclipConn then pcall(function() S.walkflingNoclipConn:Disconnect() end); S.walkflingNoclipConn = nil end
 local c = M.lp.Character
-if c then for _, v in pairs(c:GetDescendants()) do if v:IsA("BasePart") then pcall(function() v.CanCollide = true end) end end end
+if c then
+for _, v in pairs(c:GetChildren()) do
+if v:IsA("BasePart") then v.CanCollide = true end
+end
+pcall(function()
+local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
+if r then
+r.Velocity = Vector3.new(0, 0, 0)
+r.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end
+local h = c:FindFirstChildOfClass("Humanoid")
+if h then
+h.PlatformStand = false
+h.AutoRotate = true
+end
+end)
+end
 end
 
 local function startWalkfling()
@@ -985,8 +1002,8 @@ S.walkflingActive = true
 S.walkflingNoclipConn = M.RunService.Stepped:Connect(function()
 local c = M.lp.Character
 if not c then return end
-for _, v in pairs(c:GetDescendants()) do
-if v:IsA("BasePart") and v.CanCollide then pcall(function() v.CanCollide = false end) end
+for _, v in pairs(c:GetChildren()) do
+if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
 end
 end)
 local movel = 0.1
@@ -1214,8 +1231,11 @@ FlyS.noclipParts = {}
 FlyS.noclipConn = M.RunService.Stepped:Connect(function()
 local char = M.lp.Character
 if char then
-for _, child in pairs(char:GetDescendants()) do
-if child:IsA("BasePart") and child.CanCollide == true then child.CanCollide = false; FlyS.noclipParts[child] = true end
+for _, child in pairs(char:GetChildren()) do
+if child:IsA("BasePart") and child.CanCollide == true then
+child.CanCollide = false
+FlyS.noclipParts[child] = true
+end
 end
 end
 end)
@@ -1317,8 +1337,11 @@ hum.WalkSpeed = 0; hum.JumpPower = 0; hum.JumpHeight = 0; hum.AutoRotate = false
 SafeFlyS.noclipConn = M.RunService.Stepped:Connect(function()
 local c = M.lp.Character
 if not c then return end
-for _, p in pairs(c:GetDescendants()) do
-if p:IsA("BasePart") and p.CanCollide then pcall(function() p.CanCollide = false end); SafeFlyS.noclipParts[p] = true end
+for _, p in pairs(c:GetChildren()) do
+if p:IsA("BasePart") and p.CanCollide then
+p.CanCollide = false
+SafeFlyS.noclipParts[p] = true
+end
 end
 end)
 SafeFlyS.thread = M.RunService.Heartbeat:Connect(function(dt)
@@ -1329,16 +1352,31 @@ local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c
 if not r then return end
 local cam = workspace.CurrentCamera
 if not cam then return end
+local animator = hum and hum:FindFirstChildOfClass("Animator")
+if animator then
+for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+pcall(function() track:Stop(0.1) end)
+end
+end
 local control = SafeFlyS.control
 local speed = BASE_SAFE_SPEED * SafeFlyS.speed
 local camCF = cam.CFrame
-local move = (camCF.LookVector * (control.F + control.B)) + (camCF.RightVector * (control.L + control.R)) + (Vector3.new(0,1,0) * (control.Q + control.E))
-SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 3
-local bob = math.sin(SafeFlyS.bobPhase) * 2.5
+local look = camCF.LookVector
+local move = (look * (control.F + control.B)) + (camCF.RightVector * (control.L + control.R))
+SafeFlyS.bobPhase = SafeFlyS.bobPhase + dt * 1.5
+local bob = math.sin(SafeFlyS.bobPhase) * 0.8
 local desiredVel = Vector3.new(0, bob, 0)
 if move.Magnitude > 0.01 then desiredVel = desiredVel + move.Unit * speed end
 desiredVel = desiredVel + Vector3.new(0, workspace.Gravity * dt, 0)
-pcall(function() r.AssemblyLinearVelocity = desiredVel; r.AssemblyAngularVelocity = Vector3.new(0,0,0) end)
+pcall(function()
+r.AssemblyLinearVelocity = desiredVel
+r.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end)
+local flatLook = Vector3.new(look.X, 0, look.Z)
+if flatLook.Magnitude > 0.01 then
+local targetCF = CFrame.lookAt(r.Position, r.Position + flatLook.Unit)
+r.CFrame = r.CFrame:Lerp(targetCF, math.clamp(dt * 12, 0, 1))
+end
 end)
 SafeFlyS.keyDown = M.UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
