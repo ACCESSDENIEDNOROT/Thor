@@ -1,4 +1,4 @@
-local VERSION = "2.3.0"
+local VERSION = "2.3.1"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -51,9 +51,9 @@ _G.MouseRecorderCleanup = nil
 end
 
 local CONFIG = {
-SMOOTHNESS_DEFAULT = 212,
-STOP_DISTANCE = 3,
-SPAWN_STOP_DISTANCE = 6,
+SMOOTHNESS_DEFAULT = 600,
+STOP_DISTANCE = 2,
+SPAWN_STOP_DISTANCE = 5,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
@@ -61,9 +61,11 @@ GIFT_NAMES = {"Gift", "GoldenGift"},
 END_DELAY = 0.35,
 GIFT_OFFSET = Vector3.new(0, 2.5, 0),
 SPAWN_OFFSET = Vector3.new(0, 6, 0),
-MAX_SPEED = 260,
-MIN_SPEED = 25,
-SLOW_RADIUS = 12,
+MIN_SPEED = 60,
+MAX_SPEED = 400,
+SLOW_RADIUS = 8,
+FALL_SPEED = 60,
+GIFT_IGNORE_TIME = 1.0,
 }
 
 local function getSpeed()
@@ -88,6 +90,8 @@ local noTargetSince = nil
 local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
+local lastGift = nil
+local lastGiftTime = 0
 
 local function saveState(char)
 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -148,6 +152,8 @@ currentTarget = nil
 noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
+lastGift = nil
+lastGiftTime = 0
 end
 
 _G.MouseRecorderCleanup = fullCleanup
@@ -211,11 +217,22 @@ local gifts = getGifts()
 if #gifts == 0 then return nil end
 local closest = nil
 local minDist = CONFIG.MAX_DISTANCE
+local skipLast = lastGift and (os.clock() - lastGiftTime < CONFIG.GIFT_IGNORE_TIME)
+for _, gift in ipairs(gifts) do
+if skipLast and gift == lastGift then continue end
+local dist = (gift.Position - fromPos).Magnitude
+if dist < minDist then
+minDist = dist
+closest = gift
+end
+end
+if not closest and skipLast then
 for _, gift in ipairs(gifts) do
 local dist = (gift.Position - fromPos).Magnitude
 if dist < minDist then
 minDist = dist
 closest = gift
+end
 end
 end
 return closest
@@ -247,6 +264,8 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 savedState = nil
+lastGift = nil
+lastGiftTime = 0
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
 beam = Instance.new("Beam")
@@ -274,7 +293,7 @@ if goingToSpawn then
 if not spawnPart or not spawnPart.Parent then
 spawnPart = findSpawnPart()
 if not spawnPart then
-bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
 return
 end
 end
@@ -290,15 +309,13 @@ currentTarget = findClosestGift(h.Position)
 setBeamTarget(currentTarget)
 end
 if not currentTarget then
-if not noTargetSince then
-noTargetSince = os.clock()
-end
+if not noTargetSince then noTargetSince = os.clock() end
 if os.clock() - noTargetSince >= CONFIG.END_DELAY then
 goingToSpawn = true
 spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
-bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
 return
 end
 noTargetSince = nil
@@ -313,30 +330,24 @@ if isSpawn then
 fullCleanup()
 return
 end
+lastGift = currentTarget
+lastGiftTime = os.clock()
 currentTarget = nil
 setBeamTarget(nil)
-bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
 return
 end
-local flatDir = Vector3.new(delta.X, 0, delta.Z)
-local flatMag = flatDir.Magnitude
-local finalDir
-if flatMag > 0.01 then
-finalDir = flatDir / flatMag
-else
-finalDir = Vector3.zero
-end
+local dir = delta.Unit
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.15, 1)
+speedMul = math.clamp(0.5 + (dist / CONFIG.SLOW_RADIUS) * 0.5, 0.5, 1)
 end
 local currentSpeed = speed * speedMul
-local desiredVel = finalDir * currentSpeed
-desiredVel = Vector3.new(desiredVel.X, workspace.Gravity * dt, desiredVel.Z)
-bodyVel.Velocity = desiredVel
-if flatMag > 0.5 then
-local lookTarget = Vector3.new(targetPos.X, h.Position.Y, targetPos.Z)
-bodyGyro.CFrame = CFrame.lookAt(h.Position, lookTarget)
+bodyVel.Velocity = dir * currentSpeed
+local flatDir = Vector3.new(dir.X, 0, dir.Z)
+if flatDir.Magnitude > 0.01 then
+local lookAt = Vector3.new(targetPos.X, h.Position.Y, targetPos.Z)
+bodyGyro.CFrame = CFrame.lookAt(h.Position, lookAt)
 end
 end)
 end
@@ -388,7 +399,7 @@ flyTarget = nil, flyTargetPlayer = nil, walkflingNoclipConn = nil, walkflingThre
 cameraPos = Vector3.new(), cameraRot = Vector2.new(), cameraFov = 70,
 cameraWasVisible = true, savedCameraCF = nil, savedCameraFocus = nil,
 showPlayerCount = false, ignoreNpcs = false, npcEspEnabled = false, fcFreezeConn = nil,
-nullActive = false, nullSmooth = 212,
+nullActive = false, nullSmooth = 600,
 }
 
 local T = {
@@ -1334,7 +1345,7 @@ if not n or n <= 0 then return false end
 n = math.clamp(n, 1, 1000)
 S.nullSmooth = n
 _G.NullSmoothnessClose = n
-notifSet("nullspeed", string.format("Null Smooth: %d", n), true)
+notifTemp("nullspeed", string.format("Null Smooth: %d", n), 1.5)
 return true
 end
 
@@ -1352,8 +1363,7 @@ T.NullConn = M.UserInputService.InputBegan:Connect(function(input, gp)
 if gp then return end
 if input.KeyCode == keyCode then toggleNull() end
 end)
-notifSet("null_bind", "Null bind: " .. T.NullKey:upper(), true)
-task.delay(1.5, function() notifSet("null_bind", "Null bind: " .. T.NullKey:upper(), false) end)
+notifTemp("null_bind", "Null bind: " .. T.NullKey:upper(), 1.5)
 end
 
 local function killWalkfling()
@@ -2848,7 +2858,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Set Null smoothness (1-1000 | default 212)"},
+{"nullspeed n", "Set Null smoothness (1-1000 | default 600)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3044,7 +3054,7 @@ local cmdHints = {
 {p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
 {p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
 {p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
-{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-1000]  (current: %d | default: 212)", S.nullSmooth) end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-1000]  (current: %d | default: 600)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
