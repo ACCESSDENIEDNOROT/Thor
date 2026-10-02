@@ -1,4 +1,4 @@
-local VERSION = "2.2.7"
+local VERSION = "2.2.9"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -51,7 +51,7 @@ if _G.MouseRecorderCleanup then
 end
 
 local CONFIG = {
-    SMOOTHNESS_CLOSE = 212,
+    SMOOTHNESS_CLOSE_DEFAULT = 212,
     SMOOTHNESS_FAR = 10,
     FAR_DISTANCE = 30,
     STOP_DISTANCE = 0.5,
@@ -65,6 +65,12 @@ local CONFIG = {
     GIFT_OFFSET = Vector3.new(0, 3, 0),
     SPAWN_OFFSET = Vector3.new(0, 7, 0)
 }
+
+local function getSmoothnessClose()
+    local v = _G.NullSmoothnessClose
+    if type(v) ~= "number" or v ~= v then return CONFIG.SMOOTHNESS_CLOSE_DEFAULT end
+    return math.clamp(v, 1, 1000)
+end
 
 local isRunning = false
 local flyActive = false
@@ -267,6 +273,8 @@ local function start()
         local h = c:FindFirstChild("HumanoidRootPart")
         if not h then return end
 
+        local smoothnessClose = getSmoothnessClose()
+
         if goingToSpawn then
             if not spawnPart or not spawnPart.Parent then
                 spawnPart = findSpawnPart()
@@ -293,7 +301,7 @@ local function start()
             end
 
             local t = math.clamp(distance / CONFIG.FAR_DISTANCE, 0, 1)
-            local smoothness = CONFIG.SMOOTHNESS_CLOSE + (CONFIG.SMOOTHNESS_FAR - CONFIG.SMOOTHNESS_CLOSE) * t
+            local smoothness = smoothnessClose + (CONFIG.SMOOTHNESS_FAR - smoothnessClose) * t
             local alpha = 1 - math.exp(-smoothness * dt)
             local newPos = currentPos:Lerp(spawnPos, alpha)
             h.CFrame = CFrame.lookAt(newPos, spawnPos)
@@ -347,7 +355,7 @@ local function start()
         end
 
         local t = math.clamp(distance / CONFIG.FAR_DISTANCE, 0, 1)
-        local smoothness = CONFIG.SMOOTHNESS_CLOSE + (CONFIG.SMOOTHNESS_FAR - CONFIG.SMOOTHNESS_CLOSE) * t
+        local smoothness = smoothnessClose + (CONFIG.SMOOTHNESS_FAR - smoothnessClose) * t
         local alpha = 1 - math.exp(-smoothness * dt)
         local newPos = currentPos:Lerp(targetPos, alpha)
         h.CFrame = CFrame.lookAt(newPos, targetPos)
@@ -401,13 +409,13 @@ flyTarget = nil, flyTargetPlayer = nil, walkflingNoclipConn = nil, walkflingThre
 cameraPos = Vector3.new(), cameraRot = Vector2.new(), cameraFov = 70,
 cameraWasVisible = true, savedCameraCF = nil, savedCameraFocus = nil,
 showPlayerCount = false, ignoreNpcs = false, npcEspEnabled = false, fcFreezeConn = nil,
-nullActive = false,
+nullActive = false, nullSmooth = 212,
 }
 
 local T = {
 ESPKey=nil, ESPConn=nil, FCKey=nil, FCConn=nil, FlyKey=nil, FlyConn=nil,
 AuraKey=nil, AuraConn=nil, WalkflingKey=nil, WalkflingConn=nil,
-SafeFlyKey=nil, SafeFlyConn=nil,
+SafeFlyKey=nil, SafeFlyConn=nil, NullKey=nil, NullConn=nil,
 }
 
 local AuraS = {active=false, reach=21, loopConn=nil, npcEspConn=nil, aimPart="Head", pullMax=14, pullStart=7}
@@ -1315,6 +1323,7 @@ if _G.MouseRecorderCleanup then
 pcall(_G.MouseRecorderCleanup)
 _G.MouseRecorderCleanup = nil
 end
+_G.NullSmoothnessClose = S.nullSmooth
 local fn = loadstring(NULL_CODE)
 if not fn then notifSet("null", "Null FAILED (no loadstring)", false); return end
 local ok = pcall(fn)
@@ -1338,6 +1347,34 @@ unNull()
 else
 doNull()
 end
+end
+
+local function setNullSmooth(n)
+n = tonumber(n)
+if not n or n <= 0 then return false end
+n = math.clamp(n, 1, 1000)
+S.nullSmooth = n
+_G.NullSmoothnessClose = n
+notifSet("nullspeed", string.format("Null Smooth: %d", n), true)
+return true
+end
+
+local function setToggleNullKey(keyName)
+if T.NullConn then T.NullConn:Disconnect(); T.NullConn = nil end
+if not keyName or keyName == "" then T.NullKey = nil return end
+local specialKeys = {[";"]="Semicolon",["."]="Period",[","]="Comma",["/"]="Slash",["\\"]="BackSlash"}
+local keyCode
+if specialKeys[keyName] then keyCode = Enum.KeyCode[specialKeys[keyName]]
+elseif #keyName == 1 then keyCode = Enum.KeyCode[keyName:upper()]
+else local ok, kc = pcall(function() return Enum.KeyCode[keyName] end); if ok and kc then keyCode = kc end end
+if not keyCode then return end
+T.NullKey = #keyName == 1 and keyName:lower() or keyName
+T.NullConn = M.UserInputService.InputBegan:Connect(function(input, gp)
+if gp then return end
+if input.KeyCode == keyCode then toggleNull() end
+end)
+notifSet("null_bind", "Null bind: " .. T.NullKey:upper(), true)
+task.delay(1.5, function() notifSet("null_bind", "Null bind: " .. T.NullKey:upper(), false) end)
 end
 
 local function killWalkfling()
@@ -2829,7 +2866,10 @@ local COMMAND_INFO = {
 {"loadpos", "Teleport to saved position"},
 {"togglesavepos", "Continuously save position"},
 {"toggleloadpos", "Continuously load position"},
-{"null / unnull / nonull / togglenull", "Toggle Null (auto gift farm)"},
+{"null / unnull / nonull", "Toggle Null (auto gift farm)"},
+{"togglenull [key]", "Bind Null toggle key"},
+{"untogglenull", "Unbind Null toggle key"},
+{"nullspeed n", "Set Null smoothness (1-1000 | default 212)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3021,7 +3061,11 @@ local cmdHints = {
 {p="^null%s*$",h=function() return S.nullActive and "Null already ON" or "Start Null (gift farm)" end},
 {p="^unnull%s*$",h=function() return "Stop Null" end},
 {p="^nonull%s*$",h=function() return "Stop Null" end},
-{p="^togglenull%s*$",h=function() return S.nullActive and "Stop Null" or "Start Null" end},
+{p="^togglenull%s+(%S+)",h=function(m) return "Bind Null toggle: "..m:upper() end},
+{p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
+{p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
+{p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-1000]  (current: %d | default: 212)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
@@ -3133,7 +3177,11 @@ elseif cmd == "togglesavepos" then toggleSavePos()
 elseif cmd == "toggleloadpos" then toggleLoadPos()
 elseif cmd == "null" then doNull()
 elseif cmd == "unnull" or cmd == "nonull" then unNull()
-elseif cmd == "togglenull" then toggleNull()
+elseif cmd == "togglenull" then
+if arg1 then setToggleNullKey(arg1) else setToggleNullKey(nil) end
+elseif cmd == "untogglenull" then setToggleNullKey(nil)
+elseif cmd == "nullspeed" then
+if arg1 then setNullSmooth(arg1) end
 elseif cmd == "predict" then
 if not S.abuseMode then return end
 local v = tonumber(arg1)
