@@ -1,4 +1,4 @@
-local VERSION = "2.3.1"
+local VERSION = "2.3.2"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -52,27 +52,28 @@ end
 
 local CONFIG = {
 SMOOTHNESS_DEFAULT = 600,
-STOP_DISTANCE = 2,
-SPAWN_STOP_DISTANCE = 5,
+SMOOTHNESS_MAX = 2000,
+STOP_DISTANCE = 2.5,
+SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
 GIFT_NAMES = {"Gift", "GoldenGift"},
-END_DELAY = 0.35,
+END_DELAY = 0.4,
 GIFT_OFFSET = Vector3.new(0, 2.5, 0),
 SPAWN_OFFSET = Vector3.new(0, 6, 0),
 MIN_SPEED = 60,
-MAX_SPEED = 400,
-SLOW_RADIUS = 8,
+MAX_SPEED = 500,
+VISIT_COOLDOWN = 1.5,
+SLOW_RADIUS = 10,
 FALL_SPEED = 60,
-GIFT_IGNORE_TIME = 1.0,
 }
 
 local function getSpeed()
 local v = _G.NullSmoothnessClose
 if type(v) ~= "number" or v ~= v then v = CONFIG.SMOOTHNESS_DEFAULT end
-v = math.clamp(v, 1, 1000)
-local t = (v - 1) / 999
+v = math.clamp(v, 1, CONFIG.SMOOTHNESS_MAX)
+local t = (v - 1) / (CONFIG.SMOOTHNESS_MAX - 1)
 return CONFIG.MIN_SPEED + (CONFIG.MAX_SPEED - CONFIG.MIN_SPEED) * t
 end
 
@@ -85,13 +86,11 @@ local att1 = nil
 local renderConn = nil
 local charAddedConn = nil
 local bodyVel = nil
-local bodyGyro = nil
 local noTargetSince = nil
 local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
-local lastGift = nil
-local lastGiftTime = 0
+local visitedGifts = {}
 
 local function saveState(char)
 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -121,7 +120,6 @@ if att1 then pcall(function() att1:Destroy() end) att1 = nil end
 local char = activeChar or player.Character
 if char and char.Parent then
 if bodyVel then pcall(function() bodyVel:Destroy() end) bodyVel = nil end
-if bodyGyro then pcall(function() bodyGyro:Destroy() end) bodyGyro = nil end
 local hrp = char:FindFirstChild("HumanoidRootPart")
 if hrp then
 pcall(function()
@@ -138,7 +136,6 @@ end
 end
 local hum = char:FindFirstChildOfClass("Humanoid")
 if hum and savedState then
-hum.PlatformStand = false
 hum.WalkSpeed = savedState.walkSpeed
 hum.JumpPower = savedState.jumpPower
 hum.JumpHeight = savedState.jumpHeight
@@ -152,8 +149,7 @@ currentTarget = nil
 noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
-lastGift = nil
-lastGiftTime = 0
+visitedGifts = {}
 end
 
 _G.MouseRecorderCleanup = fullCleanup
@@ -164,11 +160,10 @@ local hrp = char:FindFirstChild("HumanoidRootPart")
 local hum = char:FindFirstChildOfClass("Humanoid")
 if not hrp or not hum then return end
 saveState(char)
-hum.PlatformStand = true
-hum.AutoRotate = false
 hum.WalkSpeed = 0
 hum.JumpPower = 0
 hum.JumpHeight = 0
+hum.AutoRotate = false
 for _, part in ipairs(char:GetChildren()) do
 if part:IsA("BasePart") then
 part.CanCollide = false
@@ -178,12 +173,6 @@ bodyVel = Instance.new("BodyVelocity")
 bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 bodyVel.Velocity = Vector3.zero
 bodyVel.Parent = hrp
-bodyGyro = Instance.new("BodyGyro")
-bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-bodyGyro.P = 15000
-bodyGyro.D = 500
-bodyGyro.CFrame = hrp.CFrame
-bodyGyro.Parent = hrp
 end
 
 local function findSpawnPart()
@@ -212,21 +201,32 @@ end
 return gifts
 end
 
+local function cleanupVisited()
+local now = os.clock()
+for gift, time in pairs(visitedGifts) do
+if typeof(gift) ~= "Instance" or not gift.Parent then
+visitedGifts[gift] = nil
+elseif now - time > CONFIG.VISIT_COOLDOWN then
+visitedGifts[gift] = nil
+end
+end
+end
+
 local function findClosestGift(fromPos)
+cleanupVisited()
 local gifts = getGifts()
 if #gifts == 0 then return nil end
 local closest = nil
 local minDist = CONFIG.MAX_DISTANCE
-local skipLast = lastGift and (os.clock() - lastGiftTime < CONFIG.GIFT_IGNORE_TIME)
 for _, gift in ipairs(gifts) do
-if skipLast and gift == lastGift then continue end
+if visitedGifts[gift] then continue end
 local dist = (gift.Position - fromPos).Magnitude
 if dist < minDist then
 minDist = dist
 closest = gift
 end
 end
-if not closest and skipLast then
+if not closest then
 for _, gift in ipairs(gifts) do
 local dist = (gift.Position - fromPos).Magnitude
 if dist < minDist then
@@ -264,8 +264,7 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 savedState = nil
-lastGift = nil
-lastGiftTime = 0
+visitedGifts = {}
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
 beam = Instance.new("Beam")
@@ -286,7 +285,6 @@ if not c or not c.Parent then return end
 local h = c:FindFirstChild("HumanoidRootPart")
 if not h then return end
 if not bodyVel or not bodyVel.Parent then return end
-if not bodyGyro or not bodyGyro.Parent then return end
 local speed = getSpeed()
 local targetPos, isSpawn
 if goingToSpawn then
@@ -301,6 +299,7 @@ targetPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
 isSpawn = true
 else
 if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
+if currentTarget then visitedGifts[currentTarget] = os.clock() end
 currentTarget = nil
 setBeamTarget(nil)
 end
@@ -330,8 +329,7 @@ if isSpawn then
 fullCleanup()
 return
 end
-lastGift = currentTarget
-lastGiftTime = os.clock()
+if currentTarget then visitedGifts[currentTarget] = os.clock() end
 currentTarget = nil
 setBeamTarget(nil)
 bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
@@ -340,15 +338,10 @@ end
 local dir = delta.Unit
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(0.5 + (dist / CONFIG.SLOW_RADIUS) * 0.5, 0.5, 1)
+speedMul = math.clamp(0.6 + (dist / CONFIG.SLOW_RADIUS) * 0.4, 0.6, 1)
 end
 local currentSpeed = speed * speedMul
 bodyVel.Velocity = dir * currentSpeed
-local flatDir = Vector3.new(dir.X, 0, dir.Z)
-if flatDir.Magnitude > 0.01 then
-local lookAt = Vector3.new(targetPos.X, h.Position.Y, targetPos.Z)
-bodyGyro.CFrame = CFrame.lookAt(h.Position, lookAt)
-end
 end)
 end
 
@@ -1342,7 +1335,7 @@ end
 local function setNullSmooth(n)
 n = tonumber(n)
 if not n or n <= 0 then return false end
-n = math.clamp(n, 1, 1000)
+n = math.clamp(n, 1, 2000)
 S.nullSmooth = n
 _G.NullSmoothnessClose = n
 notifTemp("nullspeed", string.format("Null Smooth: %d", n), 1.5)
@@ -2858,7 +2851,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Set Null smoothness (1-1000 | default 600)"},
+{"nullspeed n", "Set Null smoothness (1-2000 | default 600)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3054,7 +3047,7 @@ local cmdHints = {
 {p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
 {p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
 {p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
-{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-1000]  (current: %d | default: 600)", S.nullSmooth) end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-2000]  (current: %d | default: 600)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
