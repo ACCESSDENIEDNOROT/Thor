@@ -1,4 +1,4 @@
-local VERSION = "2.2.9"
+local VERSION = "2.3.0"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -46,336 +46,315 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
 if _G.MouseRecorderCleanup then
-    pcall(_G.MouseRecorderCleanup)
-    _G.MouseRecorderCleanup = nil
+pcall(_G.MouseRecorderCleanup)
+_G.MouseRecorderCleanup = nil
 end
 
 local CONFIG = {
-    SMOOTHNESS_CLOSE_DEFAULT = 212,
-    SMOOTHNESS_FAR = 10,
-    FAR_DISTANCE = 30,
-    STOP_DISTANCE = 0.5,
-    MAX_DISTANCE = 9000,
-    TOGGLE_KEY = Enum.KeyCode.T,
-    BEAM_COLOR = Color3.fromRGB(0, 255, 200),
-    BEAM_WIDTH = 0.7,
-    GIFT_NAMES = {"Gift", "GoldenGift"},
-    END_DELAY = 0.2,
-    SPAWN_STOP_DISTANCE = 1,
-    GIFT_OFFSET = Vector3.new(0, 3, 0),
-    SPAWN_OFFSET = Vector3.new(0, 7, 0)
+SMOOTHNESS_DEFAULT = 212,
+STOP_DISTANCE = 3,
+SPAWN_STOP_DISTANCE = 6,
+MAX_DISTANCE = 9000,
+BEAM_COLOR = Color3.fromRGB(0, 255, 200),
+BEAM_WIDTH = 0.7,
+GIFT_NAMES = {"Gift", "GoldenGift"},
+END_DELAY = 0.35,
+GIFT_OFFSET = Vector3.new(0, 2.5, 0),
+SPAWN_OFFSET = Vector3.new(0, 6, 0),
+MAX_SPEED = 260,
+MIN_SPEED = 25,
+SLOW_RADIUS = 12,
 }
 
-local function getSmoothnessClose()
-    local v = _G.NullSmoothnessClose
-    if type(v) ~= "number" or v ~= v then return CONFIG.SMOOTHNESS_CLOSE_DEFAULT end
-    return math.clamp(v, 1, 1000)
+local function getSpeed()
+local v = _G.NullSmoothnessClose
+if type(v) ~= "number" or v ~= v then v = CONFIG.SMOOTHNESS_DEFAULT end
+v = math.clamp(v, 1, 1000)
+local t = (v - 1) / 999
+return CONFIG.MIN_SPEED + (CONFIG.MAX_SPEED - CONFIG.MIN_SPEED) * t
 end
 
 local isRunning = false
-local flyActive = false
 local currentTarget = nil
 local activeChar = nil
 local beam = nil
 local att0 = nil
 local att1 = nil
 local renderConn = nil
-local inputConn = nil
 local charAddedConn = nil
 local bodyVel = nil
+local bodyGyro = nil
 local noTargetSince = nil
-local finished = false
 local goingToSpawn = false
 local spawnPart = nil
+local savedState = nil
+
+local function saveState(char)
+local hum = char:FindFirstChildOfClass("Humanoid")
+if not hum then return end
+savedState = {
+walkSpeed = hum.WalkSpeed,
+jumpPower = hum.JumpPower,
+jumpHeight = hum.JumpHeight,
+autoRotate = hum.AutoRotate,
+useJumpPower = hum.UseJumpPower,
+parts = {},
+}
+for _, part in ipairs(char:GetChildren()) do
+if part:IsA("BasePart") then
+savedState.parts[part] = part.CanCollide
+end
+end
+end
 
 local function fullCleanup()
-    if renderConn then renderConn:Disconnect() renderConn = nil end
-    if inputConn then inputConn:Disconnect() inputConn = nil end
-    if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
-    if beam then pcall(function() beam:Destroy() end) beam = nil end
-    if att0 then pcall(function() att0:Destroy() end) att0 = nil end
-    if att1 then pcall(function() att1:Destroy() end) att1 = nil end
-    if bodyVel then pcall(function() bodyVel:Destroy() end) bodyVel = nil end
-    isRunning = false
-    flyActive = false
-    currentTarget = nil
-    activeChar = nil
-    noTargetSince = nil
-    finished = false
-    goingToSpawn = false
-    spawnPart = nil
+isRunning = false
+if renderConn then renderConn:Disconnect() renderConn = nil end
+if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
+if beam then pcall(function() beam:Destroy() end) beam = nil end
+if att0 then pcall(function() att0:Destroy() end) att0 = nil end
+if att1 then pcall(function() att1:Destroy() end) att1 = nil end
+local char = activeChar or player.Character
+if char and char.Parent then
+if bodyVel then pcall(function() bodyVel:Destroy() end) bodyVel = nil end
+if bodyGyro then pcall(function() bodyGyro:Destroy() end) bodyGyro = nil end
+local hrp = char:FindFirstChild("HumanoidRootPart")
+if hrp then
+pcall(function()
+hrp.AssemblyLinearVelocity = Vector3.zero
+hrp.AssemblyAngularVelocity = Vector3.zero
+end)
+end
+if savedState and savedState.parts then
+for part, canCollide in pairs(savedState.parts) do
+if typeof(part) == "Instance" and part.Parent and part:IsA("BasePart") then
+pcall(function() part.CanCollide = canCollide end)
+end
+end
+end
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum and savedState then
+hum.PlatformStand = false
+hum.WalkSpeed = savedState.walkSpeed
+hum.JumpPower = savedState.jumpPower
+hum.JumpHeight = savedState.jumpHeight
+hum.AutoRotate = savedState.autoRotate
+hum.UseJumpPower = savedState.useJumpPower
+end
+end
+savedState = nil
+activeChar = nil
+currentTarget = nil
+noTargetSince = nil
+goingToSpawn = false
+spawnPart = nil
 end
 
 _G.MouseRecorderCleanup = fullCleanup
 
+local function applyFlyState(char)
+if not char or not char.Parent then return end
+local hrp = char:FindFirstChild("HumanoidRootPart")
+local hum = char:FindFirstChildOfClass("Humanoid")
+if not hrp or not hum then return end
+saveState(char)
+hum.PlatformStand = true
+hum.AutoRotate = false
+hum.WalkSpeed = 0
+hum.JumpPower = 0
+hum.JumpHeight = 0
+for _, part in ipairs(char:GetChildren()) do
+if part:IsA("BasePart") then
+part.CanCollide = false
+end
+end
+bodyVel = Instance.new("BodyVelocity")
+bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+bodyVel.Velocity = Vector3.zero
+bodyVel.Parent = hrp
+bodyGyro = Instance.new("BodyGyro")
+bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+bodyGyro.P = 15000
+bodyGyro.D = 500
+bodyGyro.CFrame = hrp.CFrame
+bodyGyro.Parent = hrp
+end
+
 local function findSpawnPart()
-    local spawn = workspace:FindFirstChild("Spawn")
-    if spawn and spawn:IsA("BasePart") then
-        return spawn
-    end
-    if spawn and spawn:IsA("Model") then
-        local part = spawn:FindFirstChildWhichIsA("BasePart", true)
-        if part then return part end
-    end
-    return nil
+local spawn = workspace:FindFirstChild("Spawn")
+if spawn and spawn:IsA("BasePart") then return spawn end
+if spawn and spawn:IsA("Model") then
+return spawn:FindFirstChildWhichIsA("BasePart", true)
+end
+return nil
 end
 
 local function getGifts()
-    local gifts = {}
-    local itemPools = workspace:FindFirstChild("Item_Pools", true)
-    if not itemPools then return gifts end
-    for _, obj in ipairs(itemPools:GetDescendants()) do
-        if obj:IsA("MeshPart") and obj.Transparency < 0.9 then
-            for _, name in ipairs(CONFIG.GIFT_NAMES) do
-                if obj.Name == name then
-                    table.insert(gifts, obj)
-                    break
-                end
-            end
-        end
-    end
-    return gifts
+local gifts = {}
+local itemPools = workspace:FindFirstChild("Item_Pools", true)
+if not itemPools then return gifts end
+for _, obj in ipairs(itemPools:GetDescendants()) do
+if obj:IsA("MeshPart") and obj.Transparency < 0.9 then
+for _, name in ipairs(CONFIG.GIFT_NAMES) do
+if obj.Name == name then
+table.insert(gifts, obj)
+break
+end
+end
+end
+end
+return gifts
 end
 
-local function findClosestGift()
-    local char = activeChar or player.Character
-    if not char then return nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local myPos = hrp.Position
-    local gifts = getGifts()
-    if #gifts == 0 then return nil end
-    local closest = nil
-    local minDist = CONFIG.MAX_DISTANCE
-    for _, gift in ipairs(gifts) do
-        local dist = (gift.Position - myPos).Magnitude
-        if dist <= CONFIG.MAX_DISTANCE and dist < minDist then
-            minDist = dist
-            closest = gift
-        end
-    end
-    return closest
+local function findClosestGift(fromPos)
+local gifts = getGifts()
+if #gifts == 0 then return nil end
+local closest = nil
+local minDist = CONFIG.MAX_DISTANCE
+for _, gift in ipairs(gifts) do
+local dist = (gift.Position - fromPos).Magnitude
+if dist < minDist then
+minDist = dist
+closest = gift
+end
+end
+return closest
 end
 
 local function setBeamTarget(target)
-    if not beam then return end
-    if att1 then pcall(function() att1:Destroy() end) att1 = nil end
-    if target and target.Parent then
-        att1 = Instance.new("Attachment")
-        att1.Parent = target
-        beam.Attachment1 = att1
-        beam.Enabled = true
-    else
-        beam.Enabled = false
-    end
+if not beam then return end
+if att1 then pcall(function() att1:Destroy() end) att1 = nil end
+if target and target.Parent then
+att1 = Instance.new("Attachment")
+att1.Parent = target
+beam.Attachment1 = att1
+beam.Enabled = true
+else
+beam.Enabled = false
 end
-
-local function applyFlyState(char)
-    if not char or not char.Parent then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hrp then
-        hrp.CanCollide = false
-    end
-    if hum then
-        hum.PlatformStand = true
-        hum.AutoRotate = false
-    end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
-    end
-    if hrp and (not bodyVel or bodyVel.Parent ~= hrp) then
-        if bodyVel then pcall(function() bodyVel:Destroy() end) end
-        bodyVel = Instance.new("BodyVelocity")
-        bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bodyVel.Velocity = Vector3.zero
-        bodyVel.Parent = hrp
-    end
-    if bodyVel then
-        bodyVel.Velocity = Vector3.zero
-    end
-end
-
-local function restoreCharacter(char)
-    if not char or not char.Parent then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if bodyVel then pcall(function() bodyVel:Destroy() end) bodyVel = nil end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = true
-        end
-    end
-    if hrp then
-        hrp.CanCollide = false
-    end
-    if hum then
-        hum.PlatformStand = false
-        hum.AutoRotate = true
-    end
-end
-
-local function stop()
-    if not isRunning then return end
-    isRunning = false
-    currentTarget = nil
-    if renderConn then renderConn:Disconnect() renderConn = nil end
-    if beam then pcall(function() beam:Destroy() end) beam = nil end
-    if att0 then pcall(function() att0:Destroy() end) att0 = nil end
-    if att1 then pcall(function() att1:Destroy() end) att1 = nil end
-    if flyActive then
-        restoreCharacter(activeChar or player.Character)
-        flyActive = false
-    end
-    activeChar = nil
-    noTargetSince = nil
-    finished = false
-    goingToSpawn = false
-    spawnPart = nil
 end
 
 local function start()
-    if isRunning then return end
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    activeChar = char
-    isRunning = true
-    flyActive = false
-    currentTarget = nil
-    noTargetSince = nil
-    finished = false
-    goingToSpawn = false
-    spawnPart = nil
-
-    att0 = Instance.new("Attachment")
-    att0.Parent = hrp
-
-    beam = Instance.new("Beam")
-    beam.Attachment0 = att0
-    beam.Color = ColorSequence.new(CONFIG.BEAM_COLOR)
-    beam.Width0 = CONFIG.BEAM_WIDTH
-    beam.Width1 = CONFIG.BEAM_WIDTH
-    beam.FaceCamera = true
-    beam.LightEmission = 1
-    beam.LightInfluence = 0
-    beam.Enabled = false
-    beam.Parent = hrp
-
-    renderConn = RunService.RenderStepped:Connect(function(dt)
-        if not isRunning or finished then return end
-        local c = activeChar or player.Character
-        if not c or not c.Parent then return end
-        local h = c:FindFirstChild("HumanoidRootPart")
-        if not h then return end
-
-        local smoothnessClose = getSmoothnessClose()
-
-        if goingToSpawn then
-            if not spawnPart or not spawnPart.Parent then
-                spawnPart = findSpawnPart()
-                if not spawnPart then return end
-            end
-
-            local spawnPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
-            local currentPos = h.Position
-            local direction = spawnPos - currentPos
-            local distance = direction.Magnitude
-
-            if distance <= CONFIG.SPAWN_STOP_DISTANCE then
-                finished = true
-                if flyActive then
-                    restoreCharacter(c)
-                    flyActive = false
-                end
-                return
-            end
-
-            if not flyActive then
-                applyFlyState(c)
-                flyActive = true
-            end
-
-            local t = math.clamp(distance / CONFIG.FAR_DISTANCE, 0, 1)
-            local smoothness = smoothnessClose + (CONFIG.SMOOTHNESS_FAR - smoothnessClose) * t
-            local alpha = 1 - math.exp(-smoothness * dt)
-            local newPos = currentPos:Lerp(spawnPos, alpha)
-            h.CFrame = CFrame.lookAt(newPos, spawnPos)
-
-            if bodyVel then
-                bodyVel.Velocity = Vector3.zero
-            end
-            h.AssemblyAngularVelocity = Vector3.zero
-            return
-        end
-
-        if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
-            currentTarget = nil
-            setBeamTarget(nil)
-        end
-
-        if not currentTarget then
-            currentTarget = findClosestGift()
-            setBeamTarget(currentTarget)
-        end
-
-        if not currentTarget then
-            if not noTargetSince then
-                noTargetSince = os.clock()
-            end
-
-            if os.clock() - noTargetSince >= CONFIG.END_DELAY then
-                goingToSpawn = true
-                spawnPart = findSpawnPart()
-                setBeamTarget(nil)
-            end
-            return
-        end
-
-        noTargetSince = nil
-
-        local targetPos = currentTarget.Position + CONFIG.GIFT_OFFSET
-        local currentPos = h.Position
-        local direction = targetPos - currentPos
-        local distance = direction.Magnitude
-
-        if distance <= CONFIG.STOP_DISTANCE then
-            currentTarget = nil
-            setBeamTarget(nil)
-            return
-        end
-
-        if not flyActive then
-            applyFlyState(c)
-            flyActive = true
-        end
-
-        local t = math.clamp(distance / CONFIG.FAR_DISTANCE, 0, 1)
-        local smoothness = smoothnessClose + (CONFIG.SMOOTHNESS_FAR - smoothnessClose) * t
-        local alpha = 1 - math.exp(-smoothness * dt)
-        local newPos = currentPos:Lerp(targetPos, alpha)
-        h.CFrame = CFrame.lookAt(newPos, targetPos)
-
-        if bodyVel then
-            bodyVel.Velocity = Vector3.zero
-        end
-        h.AssemblyAngularVelocity = Vector3.zero
-    end)
+if isRunning then return end
+local char = player.Character
+if not char then return end
+local hrp = char:FindFirstChild("HumanoidRootPart")
+if not hrp then return end
+activeChar = char
+isRunning = true
+currentTarget = nil
+noTargetSince = nil
+goingToSpawn = false
+spawnPart = nil
+savedState = nil
+att0 = Instance.new("Attachment")
+att0.Parent = hrp
+beam = Instance.new("Beam")
+beam.Attachment0 = att0
+beam.Color = ColorSequence.new(CONFIG.BEAM_COLOR)
+beam.Width0 = CONFIG.BEAM_WIDTH
+beam.Width1 = CONFIG.BEAM_WIDTH
+beam.FaceCamera = true
+beam.LightEmission = 1
+beam.LightInfluence = 0
+beam.Enabled = false
+beam.Parent = hrp
+applyFlyState(char)
+renderConn = RunService.Heartbeat:Connect(function(dt)
+if not isRunning then return end
+local c = activeChar
+if not c or not c.Parent then return end
+local h = c:FindFirstChild("HumanoidRootPart")
+if not h then return end
+if not bodyVel or not bodyVel.Parent then return end
+if not bodyGyro or not bodyGyro.Parent then return end
+local speed = getSpeed()
+local targetPos, isSpawn
+if goingToSpawn then
+if not spawnPart or not spawnPart.Parent then
+spawnPart = findSpawnPart()
+if not spawnPart then
+bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+return
+end
+end
+targetPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
+isSpawn = true
+else
+if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
+currentTarget = nil
+setBeamTarget(nil)
+end
+if not currentTarget then
+currentTarget = findClosestGift(h.Position)
+setBeamTarget(currentTarget)
+end
+if not currentTarget then
+if not noTargetSince then
+noTargetSince = os.clock()
+end
+if os.clock() - noTargetSince >= CONFIG.END_DELAY then
+goingToSpawn = true
+spawnPart = findSpawnPart()
+setBeamTarget(nil)
+end
+bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+return
+end
+noTargetSince = nil
+targetPos = currentTarget.Position + CONFIG.GIFT_OFFSET
+end
+local myPos = h.Position
+local delta = targetPos - myPos
+local dist = delta.Magnitude
+local stopDist = isSpawn and CONFIG.SPAWN_STOP_DISTANCE or CONFIG.STOP_DISTANCE
+if dist <= stopDist then
+if isSpawn then
+fullCleanup()
+return
+end
+currentTarget = nil
+setBeamTarget(nil)
+bodyVel.Velocity = Vector3.new(0, workspace.Gravity * dt, 0)
+return
+end
+local flatDir = Vector3.new(delta.X, 0, delta.Z)
+local flatMag = flatDir.Magnitude
+local finalDir
+if flatMag > 0.01 then
+finalDir = flatDir / flatMag
+else
+finalDir = Vector3.zero
+end
+local speedMul = 1
+if dist < CONFIG.SLOW_RADIUS then
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.15, 1)
+end
+local currentSpeed = speed * speedMul
+local desiredVel = finalDir * currentSpeed
+desiredVel = Vector3.new(desiredVel.X, workspace.Gravity * dt, desiredVel.Z)
+bodyVel.Velocity = desiredVel
+if flatMag > 0.5 then
+local lookTarget = Vector3.new(targetPos.X, h.Position.Y, targetPos.Z)
+bodyGyro.CFrame = CFrame.lookAt(h.Position, lookTarget)
+end
+end)
 end
 
-inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == CONFIG.TOGGLE_KEY then
-        if isRunning then stop() else start() end
-    end
+local function stop()
+if not isRunning then return end
+fullCleanup()
+end
+
+local inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
+if gpe then return end
+if input.KeyCode == Enum.KeyCode.T then
+if isRunning then stop() else start() end
+end
 end)
 
 charAddedConn = player.CharacterAdded:Connect(function()
-    stop()
+if isRunning then stop() end
 end)
 
 start()
