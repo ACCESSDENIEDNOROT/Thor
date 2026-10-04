@@ -1,4 +1,4 @@
-local VERSION = "2.3.2"
+local VERSION = "2.3.4"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -53,20 +53,23 @@ end
 local CONFIG = {
 SMOOTHNESS_DEFAULT = 600,
 SMOOTHNESS_MAX = 2000,
-STOP_DISTANCE = 2.5,
+STOP_DISTANCE = 3,
 SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
 GIFT_NAMES = {"Gift", "GoldenGift"},
 END_DELAY = 0.4,
-GIFT_OFFSET = Vector3.new(0, 2.5, 0),
-SPAWN_OFFSET = Vector3.new(0, 6, 0),
-MIN_SPEED = 60,
-MAX_SPEED = 500,
-VISIT_COOLDOWN = 1.5,
+GIFT_OFFSET = Vector3.new(0, 1.5, 0),
+SPAWN_OFFSET = Vector3.new(0, 5, 0),
+MIN_SPEED = 70,
+MAX_SPEED = 600,
+VISIT_COOLDOWN = 2.0,
 SLOW_RADIUS = 10,
 FALL_SPEED = 60,
+DIR_SMOOTHNESS = 12,
+Y_SMOOTHNESS = 5,
+MAX_Y_SPEED = 60,
 }
 
 local function getSpeed()
@@ -91,6 +94,7 @@ local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
+local smoothDir = Vector3.zero
 
 local function saveState(char)
 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -150,6 +154,7 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 visitedGifts = {}
+smoothDir = Vector3.zero
 end
 
 _G.MouseRecorderCleanup = fullCleanup
@@ -265,6 +270,7 @@ goingToSpawn = false
 spawnPart = nil
 savedState = nil
 visitedGifts = {}
+smoothDir = Vector3.zero
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
 beam = Instance.new("Beam")
@@ -285,13 +291,17 @@ if not c or not c.Parent then return end
 local h = c:FindFirstChild("HumanoidRootPart")
 if not h then return end
 if not bodyVel or not bodyVel.Parent then return end
+dt = math.min(dt, 1/30)
 local speed = getSpeed()
+local myPos = h.Position
 local targetPos, isSpawn
+
 if goingToSpawn then
 if not spawnPart or not spawnPart.Parent then
 spawnPart = findSpawnPart()
 if not spawnPart then
 bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
+smoothDir = Vector3.zero
 return
 end
 end
@@ -299,14 +309,25 @@ targetPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
 isSpawn = true
 else
 if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
-if currentTarget then visitedGifts[currentTarget] = os.clock() end
+visitedGifts[currentTarget] = os.clock()
 currentTarget = nil
 setBeamTarget(nil)
 end
+
+if currentTarget then
+local distToCurrent = (currentTarget.Position - myPos).Magnitude
+if distToCurrent <= CONFIG.STOP_DISTANCE then
+visitedGifts[currentTarget] = os.clock()
+currentTarget = nil
+setBeamTarget(nil)
+end
+end
+
 if not currentTarget then
-currentTarget = findClosestGift(h.Position)
+currentTarget = findClosestGift(myPos)
 setBeamTarget(currentTarget)
 end
+
 if not currentTarget then
 if not noTargetSince then noTargetSince = os.clock() end
 if os.clock() - noTargetSince >= CONFIG.END_DELAY then
@@ -315,33 +336,60 @@ spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
 bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
+smoothDir = Vector3.zero
 return
 end
 noTargetSince = nil
 targetPos = currentTarget.Position + CONFIG.GIFT_OFFSET
 end
-local myPos = h.Position
+
 local delta = targetPos - myPos
 local dist = delta.Magnitude
 local stopDist = isSpawn and CONFIG.SPAWN_STOP_DISTANCE or CONFIG.STOP_DISTANCE
-if dist <= stopDist then
-if isSpawn then
+
+if isSpawn and dist <= stopDist then
 fullCleanup()
 return
 end
-if currentTarget then visitedGifts[currentTarget] = os.clock() end
-currentTarget = nil
-setBeamTarget(nil)
-bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
-return
+
+local desiredDirXZ
+if delta.Magnitude > 0.001 then
+desiredDirXZ = Vector3.new(delta.X, 0, delta.Z)
+if desiredDirXZ.Magnitude > 0.001 then
+desiredDirXZ = desiredDirXZ.Unit
+else
+desiredDirXZ = Vector3.zero
 end
-local dir = delta.Unit
+else
+desiredDirXZ = Vector3.zero
+end
+
+local dirAlpha = math.clamp(dt * CONFIG.DIR_SMOOTHNESS, 0, 1)
+if smoothDir.Magnitude < 0.01 then
+smoothDir = desiredDirXZ
+else
+smoothDir = smoothDir:Lerp(desiredDirXZ, dirAlpha)
+if smoothDir.Magnitude > 0.001 then
+smoothDir = smoothDir.Unit
+end
+end
+
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(0.6 + (dist / CONFIG.SLOW_RADIUS) * 0.4, 0.6, 1)
+speedMul = math.clamp(0.75 + (dist / CONFIG.SLOW_RADIUS) * 0.25, 0.75, 1)
 end
-local currentSpeed = speed * speedMul
-bodyVel.Velocity = dir * currentSpeed
+local horizontalVel = smoothDir * (speed * speedMul)
+
+local desiredY = targetPos.Y
+local currentY = myPos.Y
+local yDiff = desiredY - currentY
+local yVel = math.clamp(yDiff * CONFIG.Y_SMOOTHNESS, -CONFIG.MAX_Y_SPEED, CONFIG.MAX_Y_SPEED)
+
+if isSpawn and dist <= stopDist * 2 then
+yVel = math.clamp(yDiff * 4, -30, 30)
+end
+
+bodyVel.Velocity = Vector3.new(horizontalVel.X, yVel, horizontalVel.Z)
 end)
 end
 
@@ -399,6 +447,7 @@ local T = {
 ESPKey=nil, ESPConn=nil, FCKey=nil, FCConn=nil, FlyKey=nil, FlyConn=nil,
 AuraKey=nil, AuraConn=nil, WalkflingKey=nil, WalkflingConn=nil,
 SafeFlyKey=nil, SafeFlyConn=nil, NullKey=nil, NullConn=nil,
+StaminaKey=nil, StaminaConn=nil,
 }
 
 local AuraS = {active=false, reach=21, loopConn=nil, npcEspConn=nil, aimPart="Head", pullMax=14, pullStart=7}
@@ -407,6 +456,7 @@ local SafeFlyS = {active=false, speed=1, control={F=0,B=0,L=0,R=0,Q=0,E=0}, thre
 local PredictS = {baseTime=0.45, userMultiplier=1.1, velocityScale=true, distanceScale=true, gravityComp=true, maxTime=2.5, velFactor=28, holdThreshold=50, holdTimeFar=0.6, holdTimeNear=0.25, maxHoldTime=0.7, matchRotation=true}
 local WS = {active=false, speed=16, default=16, loopConn=nil, charConn=nil}
 local PosS = {saved=nil, saveActive=false, loadActive=false, saveConn=nil, loadConn=nil}
+local StaminaS = {active=false, conn=nil, sprintState=nil, updateStates=nil}
 
 local G = {}
 G.PARENT = Instance.new("ScreenGui")
@@ -463,14 +513,14 @@ G.notifGui.Parent = M.playerGui
 G.notifBox = Instance.new("Frame")
 G.notifBox.BackgroundTransparency = 1
 G.notifBox.AnchorPoint = Vector2.new(0, 1)
-G.notifBox.Position = UDim2.new(0, 12, 1, -12)
-G.notifBox.Size = UDim2.new(0, 420, 0, 240)
+G.notifBox.Position = UDim2.new(0, 14, 1, -14)
+G.notifBox.Size = UDim2.new(0, 560, 0, 320)
 G.notifBox.ZIndex = 10000
 G.notifBox.Parent = G.notifGui
 local notifLayout = Instance.new("UIListLayout")
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
 notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-notifLayout.Padding = UDim.new(0, 2)
+notifLayout.Padding = UDim.new(0, 3)
 notifLayout.Parent = G.notifBox
 
 local NOTIF_ON_COLOR = Color3.fromRGB(80, 170, 255)
@@ -518,10 +568,10 @@ label.Text = text
 label.TextColor3 = NOTIF_ON_COLOR
 label.TextStrokeTransparency = 0.5
 label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-label.TextSize = 12
+label.TextSize = 16
 label.Font = Enum.Font.GothamSemibold
 label.TextXAlignment = Enum.TextXAlignment.Left
-label.Size = UDim2.new(1, 0, 0, 14)
+label.Size = UDim2.new(1, 0, 0, 20)
 label.TextTransparency = 1
 label.ZIndex = 10000
 label.LayoutOrder = -notifOrder
@@ -2200,6 +2250,7 @@ end
 return false
 end
 
+-- ARREGLO AURA TOGGLE: solo bindea la tecla, no activa directamente.
 local function setToggleAuraKey(keyName)
 if T.AuraConn then T.AuraConn:Disconnect(); T.AuraConn = nil end
 if not keyName or keyName == "" then T.AuraKey = nil; return end
@@ -2225,9 +2276,97 @@ end
 end
 end
 end)
-notifSet("aura_bind", "Aura bind: " .. T.AuraKey:upper(), true)
-task.delay(1.5, function() notifSet("aura_bind", "Aura bind: " .. T.AuraKey:upper(), false) end)
+notifTemp("aura_bind", "Aura bind: " .. T.AuraKey:upper(), 1.5)
 end
+
+-- ================== STAMINA (integrado del script StaminaSprintOff, sin GUI) ==================
+local function staminaHasMeleeStatus()
+local char = M.lp.Character
+if char and char:FindFirstChild("MeleeStatus", true) then return true end
+local bp = M.lp:FindFirstChild("Backpack")
+if bp and bp:FindFirstChild("MeleeStatus", true) then return true end
+return false
+end
+
+local function staminaGetRemote()
+if StaminaS.updateStates and StaminaS.updateStates.Parent then
+return StaminaS.updateStates
+end
+local ok, remote = pcall(function()
+return M.ReplicatedStorage:WaitForChild("Events", 5):WaitForChild("Player", 5):WaitForChild("UpdateStates", 5)
+end)
+if ok and remote then
+StaminaS.updateStates = remote
+return remote
+end
+return nil
+end
+
+local function startStaminaDisable()
+if StaminaS.active then return true end
+local remote = staminaGetRemote()
+if not remote then notifSet("stamina", "Stamina FAILED", false); return false end
+StaminaS.active = true
+StaminaS.sprintState = {
+Sliding = false,
+Crouching = false,
+Sprinting = false,
+Aiming = true,
+Input = "Console",
+Parkour = false
+}
+StaminaS.conn = M.RunService.RenderStepped:Connect(function()
+if not StaminaS.active then return end
+local char = M.lp.Character
+if not char or not char:FindFirstChild("Humanoid") then return end
+if staminaHasMeleeStatus() then return end
+local r = StaminaS.updateStates
+if not r or not r.Parent then r = staminaGetRemote(); if not r then return end end
+local mouse = M.lp:GetMouse()
+local cam = workspace.CurrentCamera
+if not mouse or not cam then return end
+pcall(function()
+r:FireServer(
+mouse.Origin.Position,
+mouse.Hit.Position,
+cam.CFrame.LookVector,
+StaminaS.sprintState
+)
+end)
+end)
+notifSet("stamina", "Stamina OFF (no drain)", true)
+return true
+end
+
+local function stopStaminaDisable()
+if not StaminaS.active then return end
+StaminaS.active = false
+if StaminaS.conn then StaminaS.conn:Disconnect(); StaminaS.conn = nil end
+StaminaS.sprintState = nil
+notifSet("stamina", "Stamina ON (normal)", false)
+end
+
+local function toggleStaminaDisable()
+if StaminaS.active then stopStaminaDisable() else startStaminaDisable() end
+end
+
+local function setToggleStaminaKey(keyName)
+if T.StaminaConn then T.StaminaConn:Disconnect(); T.StaminaConn = nil end
+if not keyName or keyName == "" then T.StaminaKey = nil; return end
+local specialKeys = {[";"]="Semicolon",["."]="Period",[","]="Comma",["/"]="Slash",["\\"]="BackSlash"}
+local keyCode
+if specialKeys[keyName] then keyCode = Enum.KeyCode[specialKeys[keyName]]
+elseif #keyName == 1 then keyCode = Enum.KeyCode[keyName:upper()]
+else local ok, kc = pcall(function() return Enum.KeyCode[keyName] end); if ok and kc then keyCode = kc end end
+if not keyCode then return end
+T.StaminaKey = #keyName == 1 and keyName:lower() or keyName
+T.StaminaConn = M.UserInputService.InputBegan:Connect(function(input, gp)
+if gp then return end
+if input.KeyCode == keyCode then toggleStaminaDisable() end
+end)
+notifTemp("stamina_bind", "Stamina bind: " .. T.StaminaKey:upper(), 1.5)
+end
+-- ==============================================================================================
 
 local function makeLine(parent, pos, size)
 local f = Instance.new("Frame")
@@ -2877,10 +3016,11 @@ local ABUSE_COMMANDS = {
 {"aimbot", "Load aimbot"},
 {"ia", "Load Ninni Hub"},
 {"havoc", "Load Havoc"},
-{"aura / unaura / toggleaura", "Aura toggle"},
+{"aura / unaura", "Aura toggle"},
 {"aurareach n", "Set aura range"},
 {"aurapart [part]", "Set aura aim part"},
-{"toggleaurakey [key]", "Bind aura toggle"},
+{"toggleaura [key]", "Bind aura toggle key"},
+{"untoggleaura", "Unbind aura toggle key"},
 {"ignorenpcs / npcs", "Hide/Show NPC ESP"},
 {"rspy / remotespy", "Load remote spy"},
 {"simplespy", "Load SimpleSpy V3"},
@@ -2891,6 +3031,10 @@ local ABUSE_COMMANDS = {
 {"safefly / unsafefly", "Smooth velocity fly"},
 {"togglesafefly [key]", "Bind safefly toggle"},
 {"safeflyspeed n", "Set safefly speed"},
+{"stamina", "Restore normal stamina drain"},
+{"nostamina", "Disable stamina drain (infinite sprint)"},
+{"togglestamina [key]", "Bind stamina toggle key"},
+{"untogglestamina", "Unbind stamina toggle key"},
 }
 
 for _, entry in ipairs(COMMAND_INFO) do
@@ -3023,7 +3167,16 @@ local cmdHints = {
 {p="^togglewalkfling%s+(%S+)",h=function(m) return "Bind Walkfling toggle: "..m:upper() end},
 {p="^untogglewalkfling%s*$",h=function() return "Unbind Walkfling toggle" end},
 {p="^toggleaurakey%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
+{p="^toggleaura%s+(%S+)",h=function(m) return "Bind Aura toggle: "..m:upper() end},
+{p="^toggleaura%s*$",h=function() return "toggleaura [key]  (bind key, no activa)" end},
+{p="^untoggleaura%s*$",h=function() return "Unbind Aura toggle" end},
 {p="^togglesafefly%s+(%S+)",h=function(m) return "Bind SafeFly toggle: "..m:upper() end},
+{p="^togglestamina%s+(%S+)",h=function(m) return "Bind Stamina toggle: "..m:upper() end},
+{p="^togglestamina%s*$",h=function() return "togglestamina [key]  (bind key)" end},
+{p="^untogglestamina%s*$",h=function() return "Unbind Stamina toggle" end},
+{p="^stamina%s*$",h=function() return StaminaS.active and "Restore normal stamina" or "Already normal" end},
+{p="^nostamina%s*$",h=function() return StaminaS.active and "Already OFF" or "Disable stamina drain" end},
+{p="^unstamina%s*$",h=function() return "Restore normal stamina" end},
 {p="^reset%s*$",h=function() return "Kill your character" end},
 {p="^speed%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
 {p="^ws%s+(%S+)",h=function(m) return "Set walkspeed: "..m end},
@@ -3078,7 +3231,6 @@ local cmdHints = {
 {p="^nofly%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return "Stop flying" end},
 {p="^walkfling%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return S.walkflingActive and "Stop walkfling" or "Start walkfling" end},
 {p="^aura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Aura already ON" or "Start aura" end},
-{p="^toggleaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Start aura" end},
 {p="^unaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Aura already OFF" end},
 {p="^noaura%s*$", h=function() if not S.abuseMode then return "Requires abuse mode" end return AuraS.active and "Stop aura" or "Aura already OFF" end},
 {p="^aurareach%s+(%S+)", h=function(m) return "Aura range: "..m end},
@@ -3133,10 +3285,20 @@ elseif cmd == "untogglewalkfling" then setToggleWalkflingKey(nil)
 elseif cmd == "untogglefly" then setToggleFlyKey(nil)
 elseif cmd == "untogglefc" then setToggleFCKey(nil)
 elseif cmd == "untoggleesp" then setToggleESPKey(nil)
-elseif cmd == "toggleaurakey" then if arg1 then setToggleAuraKey(arg1) else setToggleAuraKey(nil) end
+elseif cmd == "toggleaurakey" or cmd == "toggleaura" then
+if arg1 then setToggleAuraKey(arg1) else setToggleAuraKey(nil) end
 elseif cmd == "untoggleaura" then setToggleAuraKey(nil)
 elseif cmd == "togglesafefly" then if arg1 then setToggleSafeFlyKey(arg1) else setToggleSafeFlyKey(nil) end
 elseif cmd == "untogglesafefly" then setToggleSafeFlyKey(nil)
+elseif cmd == "stamina" then
+if StaminaS.active then stopStaminaDisable() end
+elseif cmd == "nostamina" then
+startStaminaDisable()
+elseif cmd == "unstamina" then
+stopStaminaDisable()
+elseif cmd == "togglestamina" then
+if arg1 then setToggleStaminaKey(arg1) else setToggleStaminaKey(nil) end
+elseif cmd == "untogglestamina" then setToggleStaminaKey(nil)
 elseif cmd == "reset" then
 local c = M.lp.Character
 if c then
@@ -3250,7 +3412,6 @@ elseif cmd == "aimbot2" then if not S.abuseMode then return end; doAimbot2()
 elseif cmd == "ia" then if not S.abuseMode then return end; doIA()
 elseif cmd == "havoc" then if not S.abuseMode then return end; doHavoc()
 elseif cmd == "aura" then if not S.abuseMode then return end; startAura()
-elseif cmd == "toggleaura" then toggleAura()
 elseif cmd == "noaura" or cmd == "unaura" then if not S.abuseMode then return end; stopAura()
 elseif cmd == "aurareach" then if not S.abuseMode then return end; local v = tonumber(arg1); if v then setAuraReach(v) end
 elseif cmd == "aurapart" then if not S.abuseMode then return end; if arg1 then setAuraPart(arg1) end
