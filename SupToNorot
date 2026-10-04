@@ -1,4 +1,4 @@
-local VERSION = "2.3.4"
+local VERSION = "2.3.5"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -53,23 +53,20 @@ end
 local CONFIG = {
 SMOOTHNESS_DEFAULT = 600,
 SMOOTHNESS_MAX = 2000,
-STOP_DISTANCE = 3,
-SPAWN_STOP_DISTANCE = 6,
+STOP_DISTANCE = 2.5,
+SPAWN_STOP_DISTANCE = 5,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
 GIFT_NAMES = {"Gift", "GoldenGift"},
-END_DELAY = 0.4,
-GIFT_OFFSET = Vector3.new(0, 1.5, 0),
+END_DELAY = 0.35,
+GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
-MIN_SPEED = 70,
-MAX_SPEED = 600,
-VISIT_COOLDOWN = 2.0,
+MIN_SPEED = 80,
+MAX_SPEED = 650,
+VISIT_COOLDOWN = 1.2,
+FALL_SPEED = 80,
 SLOW_RADIUS = 10,
-FALL_SPEED = 60,
-DIR_SMOOTHNESS = 12,
-Y_SMOOTHNESS = 5,
-MAX_Y_SPEED = 60,
 }
 
 local function getSpeed()
@@ -89,12 +86,12 @@ local att1 = nil
 local renderConn = nil
 local charAddedConn = nil
 local bodyVel = nil
+local bodyGyro = nil
 local noTargetSince = nil
 local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
-local smoothDir = Vector3.zero
 
 local function saveState(char)
 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -124,6 +121,7 @@ if att1 then pcall(function() att1:Destroy() end) att1 = nil end
 local char = activeChar or player.Character
 if char and char.Parent then
 if bodyVel then pcall(function() bodyVel:Destroy() end) bodyVel = nil end
+if bodyGyro then pcall(function() bodyGyro:Destroy() end) bodyGyro = nil end
 local hrp = char:FindFirstChild("HumanoidRootPart")
 if hrp then
 pcall(function()
@@ -154,7 +152,6 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 visitedGifts = {}
-smoothDir = Vector3.zero
 end
 
 _G.MouseRecorderCleanup = fullCleanup
@@ -178,6 +175,12 @@ bodyVel = Instance.new("BodyVelocity")
 bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 bodyVel.Velocity = Vector3.zero
 bodyVel.Parent = hrp
+bodyGyro = Instance.new("BodyGyro")
+bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+bodyGyro.P = 100000
+bodyGyro.D = 500
+bodyGyro.CFrame = hrp.CFrame
+bodyGyro.Parent = hrp
 end
 
 local function findSpawnPart()
@@ -194,7 +197,7 @@ local gifts = {}
 local itemPools = workspace:FindFirstChild("Item_Pools", true)
 if not itemPools then return gifts end
 for _, obj in ipairs(itemPools:GetDescendants()) do
-if obj:IsA("MeshPart") and obj.Transparency < 0.9 then
+if obj:IsA("BasePart") and obj.Transparency < 0.9 then
 for _, name in ipairs(CONFIG.GIFT_NAMES) do
 if obj.Name == name then
 table.insert(gifts, obj)
@@ -270,7 +273,6 @@ goingToSpawn = false
 spawnPart = nil
 savedState = nil
 visitedGifts = {}
-smoothDir = Vector3.zero
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
 beam = Instance.new("Beam")
@@ -284,6 +286,7 @@ beam.LightInfluence = 0
 beam.Enabled = false
 beam.Parent = hrp
 applyFlyState(char)
+
 renderConn = RunService.Heartbeat:Connect(function(dt)
 if not isRunning then return end
 local c = activeChar
@@ -301,7 +304,6 @@ if not spawnPart or not spawnPart.Parent then
 spawnPart = findSpawnPart()
 if not spawnPart then
 bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
-smoothDir = Vector3.zero
 return
 end
 end
@@ -336,7 +338,6 @@ spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
 bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
-smoothDir = Vector3.zero
 return
 end
 noTargetSince = nil
@@ -352,44 +353,23 @@ fullCleanup()
 return
 end
 
-local desiredDirXZ
-if delta.Magnitude > 0.001 then
-desiredDirXZ = Vector3.new(delta.X, 0, delta.Z)
-if desiredDirXZ.Magnitude > 0.001 then
-desiredDirXZ = desiredDirXZ.Unit
+if dist < 0.05 then
+bodyVel.Velocity = Vector3.zero
 else
-desiredDirXZ = Vector3.zero
-end
-else
-desiredDirXZ = Vector3.zero
-end
-
-local dirAlpha = math.clamp(dt * CONFIG.DIR_SMOOTHNESS, 0, 1)
-if smoothDir.Magnitude < 0.01 then
-smoothDir = desiredDirXZ
-else
-smoothDir = smoothDir:Lerp(desiredDirXZ, dirAlpha)
-if smoothDir.Magnitude > 0.001 then
-smoothDir = smoothDir.Unit
-end
-end
-
+local dir = delta.Unit
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(0.75 + (dist / CONFIG.SLOW_RADIUS) * 0.25, 0.75, 1)
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.35, 1)
 end
-local horizontalVel = smoothDir * (speed * speedMul)
-
-local desiredY = targetPos.Y
-local currentY = myPos.Y
-local yDiff = desiredY - currentY
-local yVel = math.clamp(yDiff * CONFIG.Y_SMOOTHNESS, -CONFIG.MAX_Y_SPEED, CONFIG.MAX_Y_SPEED)
-
-if isSpawn and dist <= stopDist * 2 then
-yVel = math.clamp(yDiff * 4, -30, 30)
+bodyVel.Velocity = dir * (speed * speedMul)
 end
 
-bodyVel.Velocity = Vector3.new(horizontalVel.X, yVel, horizontalVel.Z)
+if bodyGyro then
+local lookDir = Vector3.new(delta.X, 0, delta.Z)
+if lookDir.Magnitude > 0.1 then
+bodyGyro.CFrame = CFrame.lookAt(h.Position, h.Position + lookDir.Unit)
+end
+end
 end)
 end
 
@@ -2250,7 +2230,6 @@ end
 return false
 end
 
--- ARREGLO AURA TOGGLE: solo bindea la tecla, no activa directamente.
 local function setToggleAuraKey(keyName)
 if T.AuraConn then T.AuraConn:Disconnect(); T.AuraConn = nil end
 if not keyName or keyName == "" then T.AuraKey = nil; return end
@@ -2279,7 +2258,6 @@ end)
 notifTemp("aura_bind", "Aura bind: " .. T.AuraKey:upper(), 1.5)
 end
 
--- ================== STAMINA (integrado del script StaminaSprintOff, sin GUI) ==================
 local function staminaHasMeleeStatus()
 local char = M.lp.Character
 if char and char:FindFirstChild("MeleeStatus", true) then return true end
@@ -2366,7 +2344,6 @@ if input.KeyCode == keyCode then toggleStaminaDisable() end
 end)
 notifTemp("stamina_bind", "Stamina bind: " .. T.StaminaKey:upper(), 1.5)
 end
--- ==============================================================================================
 
 local function makeLine(parent, pos, size)
 local f = Instance.new("Frame")
@@ -3108,6 +3085,7 @@ if S.walkflingActive then stopWalkfling() end
 if AuraS.active then stopAura() end
 if FlyS.flying then stopFly() end
 if SafeFlyS.active then stopSafeFly() end
+if StaminaS.active then stopStaminaDisable() end
 end
 if on then
 pcall(function() if G.gui and G.gui.Parent then M.TweenService:Create(G.gui, TweenInfo.new(0.8), {BackgroundColor3 = C.ABUSE_BG}):Play() end end)
