@@ -1,4 +1,4 @@
-local VERSION = "2.3.6"
+local VERSION = "2.3.7"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -59,7 +59,7 @@ MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
 GIFT_NAMES = {"Gift", "GoldenGift"},
-END_DELAY = 0.35,
+END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
 MIN_SPEED = 80,
@@ -93,20 +93,26 @@ local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
 
--- ================= GIFT TRACKING (EVENT-BASED, ESCANEO ÚNICO) =================
+-- ============ GIFT TRACKING (Item_Pools, escaneo inicial + eventos) ============
 local GIFT_NAMES_SET = {}
 for _, n in ipairs(CONFIG.GIFT_NAMES) do GIFT_NAMES_SET[n] = true end
 
 local giftCache = {}
 local giftTrackingConns = {}
 local itemPoolsRef = nil
-local workspaceGiftConn = nil
+local lastForcedRescan = 0
 
 local function isGiftObject(obj)
 if not obj or typeof(obj) ~= "Instance" then return false end
 if not obj:IsA("BasePart") then return false end
-if obj.Transparency >= 0.9 then return false end
 return GIFT_NAMES_SET[obj.Name] == true
+end
+
+-- chequeo en vivo (transparency puede cambiar después de spawnear)
+local function isGiftUsable(obj)
+if typeof(obj) ~= "Instance" or not obj.Parent then return false end
+if obj.Transparency >= 0.9 then return false end
+return true
 end
 
 local function disconnectGiftTracking()
@@ -126,14 +132,39 @@ end
 end
 end
 
-local setupGiftTracking
+local function forceRescan()
+local itemPools = workspace:FindFirstChild("Item_Pools", true)
+if not itemPools then return end
+for _, obj in ipairs(itemPools:GetDescendants()) do
+if isGiftObject(obj) and not giftCache[obj] then
+giftCache[obj] = true
+end
+end
+for gift in pairs(giftCache) do
+if typeof(gift) ~= "Instance" or not gift.Parent then
+giftCache[gift] = nil
+end
+end
+end
 
+local setupGiftTracking
 local function setupGiftTracking()
 disconnectGiftTracking()
 local itemPools = workspace:FindFirstChild("Item_Pools", true)
 itemPoolsRef = itemPools
 initialScanGifts(itemPools)
-if not itemPools then return end
+if not itemPools then
+local conn
+conn = workspace.DescendantAdded:Connect(function(obj)
+if obj.Name == "Item_Pools" and (obj:IsA("Folder") or obj:IsA("Model")) then
+if conn then conn:Disconnect() end
+task.wait(0.3)
+setupGiftTracking()
+end
+end)
+table.insert(giftTrackingConns, conn)
+return
+end
 
 table.insert(giftTrackingConns, itemPools.DescendantAdded:Connect(function(obj)
 if isGiftObject(obj) then
@@ -158,15 +189,6 @@ end
 end))
 end
 
-workspaceGiftConn = workspace.DescendantAdded:Connect(function(obj)
-if obj.Name == "Item_Pools" and obj:IsA("Folder") then
-task.wait(0.2)
-if workspace:FindFirstChild("Item_Pools", true) ~= itemPoolsRef then
-setupGiftTracking()
-end
-end
-end)
-
 setupGiftTracking()
 -- ==============================================================================
 
@@ -189,9 +211,9 @@ cleanupVisited()
 local closest = nil
 local minDist = CONFIG.MAX_DISTANCE
 
+-- 1ra pasada: solo gifts usables y no visitados
 for gift in pairs(giftCache) do
-if typeof(gift) == "Instance" and gift.Parent and gift.Transparency < 0.9 then
-if not visitedGifts[gift] then
+if isGiftUsable(gift) and not visitedGifts[gift] then
 local dist = (gift.Position - fromPos).Magnitude
 if dist < minDist then
 minDist = dist
@@ -199,12 +221,13 @@ closest = gift
 end
 end
 end
-end
 
 if closest then return closest end
 
+-- 2da pasada: todos visitados, agarrar el más cercano igual
+minDist = CONFIG.MAX_DISTANCE
 for gift in pairs(giftCache) do
-if typeof(gift) == "Instance" and gift.Parent and gift.Transparency < 0.9 then
+if isGiftUsable(gift) then
 local dist = (gift.Position - fromPos).Magnitude
 if dist < minDist then
 minDist = dist
@@ -397,6 +420,17 @@ end
 if not currentTarget then
 currentTarget = findClosestGift(myPos)
 setBeamTarget(currentTarget)
+end
+
+-- si no hay target, forzar un rescan (throttled) antes de rendirse
+if not currentTarget then
+local now = os.clock()
+if now - lastForcedRescan > 0.4 then
+lastForcedRescan = now
+forceRescan()
+currentTarget = findClosestGift(myPos)
+if currentTarget then setBeamTarget(currentTarget) end
+end
 end
 
 if not currentTarget then
