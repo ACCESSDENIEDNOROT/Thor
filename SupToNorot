@@ -1,4 +1,4 @@
-local VERSION = "2.3.7"
+local VERSION = "2.4.0"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -53,8 +53,8 @@ end
 local CONFIG = {
 SMOOTHNESS_DEFAULT = 600,
 SMOOTHNESS_MAX = 2000,
-STOP_DISTANCE = 2.5,
-SPAWN_STOP_DISTANCE = 5,
+STOP_DISTANCE = 8,
+SPAWN_STOP_DISTANCE = 8,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
 BEAM_WIDTH = 0.7,
@@ -63,10 +63,9 @@ END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
 MIN_SPEED = 80,
-MAX_SPEED = 650,
-VISIT_COOLDOWN = 1.2,
-FALL_SPEED = 80,
-SLOW_RADIUS = 10,
+MAX_SPEED = 5000,
+VISIT_COOLDOWN = 4.0,
+SLOW_RADIUS = 40,
 }
 
 local function getSpeed()
@@ -93,7 +92,82 @@ local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
 
--- ============ GIFT TRACKING (Item_Pools, escaneo inicial + eventos) ============
+-- ============ ENEMY CLEANER (workspace.Enemies) ============
+local enemyCleanConns = {}
+local enemiesRef = nil
+
+local function isInsideBell(obj)
+local current = obj
+local depth = 0
+while current and depth < 25 do
+if typeof(current) ~= "Instance" then break end
+if current.Name == "Bell" then return true end
+if current == workspace then break end
+current = current.Parent
+depth = depth + 1
+end
+return false
+end
+
+local function cleanEnemyObject(obj)
+if not obj or typeof(obj) ~= "Instance" then return end
+if isInsideBell(obj) then return end
+if obj:IsA("TouchInterest") or obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("RemoteEvent") then
+pcall(function() obj:Destroy() end)
+end
+end
+
+local function disconnectEnemyCleaner()
+for _, c in ipairs(enemyCleanConns) do
+pcall(function() c:Disconnect() end)
+end
+enemyCleanConns = {}
+end
+
+local startEnemyCleaner
+startEnemyCleaner = function()
+disconnectEnemyCleaner()
+local enemies = workspace:FindFirstChild("Enemies")
+enemiesRef = enemies
+if not enemies then
+local conn
+conn = workspace.DescendantAdded:Connect(function(obj)
+if obj.Name == "Enemies" and (obj:IsA("Folder") or obj:IsA("Model")) then
+if conn then conn:Disconnect() end
+task.wait(0.2)
+if isRunning then startEnemyCleaner() end
+end
+end)
+table.insert(enemyCleanConns, conn)
+return
+end
+
+for _, obj in ipairs(enemies:GetDescendants()) do
+cleanEnemyObject(obj)
+end
+
+table.insert(enemyCleanConns, enemies.DescendantAdded:Connect(function(obj)
+cleanEnemyObject(obj)
+end))
+
+table.insert(enemyCleanConns, enemies.AncestryChanged:Connect(function()
+if not enemies:IsDescendantOf(game) then
+task.delay(1, function()
+if isRunning and enemiesRef == enemies then
+startEnemyCleaner()
+end
+end)
+end
+end))
+end
+
+local function stopEnemyCleaner()
+disconnectEnemyCleaner()
+enemiesRef = nil
+end
+-- ===========================================================
+
+-- ============ GIFT TRACKING (Item_Pools) ============
 local GIFT_NAMES_SET = {}
 for _, n in ipairs(CONFIG.GIFT_NAMES) do GIFT_NAMES_SET[n] = true end
 
@@ -108,7 +182,6 @@ if not obj:IsA("BasePart") then return false end
 return GIFT_NAMES_SET[obj.Name] == true
 end
 
--- chequeo en vivo (transparency puede cambiar después de spawnear)
 local function isGiftUsable(obj)
 if typeof(obj) ~= "Instance" or not obj.Parent then return false end
 if obj.Transparency >= 0.9 then return false end
@@ -211,7 +284,6 @@ cleanupVisited()
 local closest = nil
 local minDist = CONFIG.MAX_DISTANCE
 
--- 1ra pasada: solo gifts usables y no visitados
 for gift in pairs(giftCache) do
 if isGiftUsable(gift) and not visitedGifts[gift] then
 local dist = (gift.Position - fromPos).Magnitude
@@ -224,7 +296,6 @@ end
 
 if closest then return closest end
 
--- 2da pasada: todos visitados, agarrar el más cercano igual
 minDist = CONFIG.MAX_DISTANCE
 for gift in pairs(giftCache) do
 if isGiftUsable(gift) then
@@ -259,6 +330,7 @@ end
 
 local function fullCleanup()
 isRunning = false
+stopEnemyCleaner()
 if renderConn then renderConn:Disconnect() renderConn = nil end
 if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
 if beam then pcall(function() beam:Destroy() end) beam = nil end
@@ -289,6 +361,7 @@ hum.JumpPower = savedState.jumpPower
 hum.JumpHeight = savedState.jumpHeight
 hum.AutoRotate = savedState.autoRotate
 hum.UseJumpPower = savedState.useJumpPower
+pcall(function() hum.PlatformStand = false end)
 end
 end
 savedState = nil
@@ -378,6 +451,7 @@ beam.LightInfluence = 0
 beam.Enabled = false
 beam.Parent = hrp
 applyFlyState(char)
+startEnemyCleaner()
 
 renderConn = RunService.Heartbeat:Connect(function(dt)
 if not isRunning then return end
@@ -395,13 +469,30 @@ if goingToSpawn then
 if not spawnPart or not spawnPart.Parent then
 spawnPart = findSpawnPart()
 if not spawnPart then
-bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
+local now = os.clock()
+if now - lastForcedRescan > 0.4 then
+lastForcedRescan = now
+forceRescan()
+end
+local newTarget = findClosestGift(myPos)
+if newTarget then
+goingToSpawn = false
+noTargetSince = nil
+currentTarget = newTarget
+setBeamTarget(currentTarget)
+else
+bodyVel.Velocity = Vector3.zero
 return
 end
 end
+end
+if goingToSpawn and spawnPart then
 targetPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
 isSpawn = true
-else
+end
+end
+
+if not isSpawn then
 if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
 visitedGifts[currentTarget] = os.clock()
 currentTarget = nil
@@ -409,8 +500,19 @@ setBeamTarget(nil)
 end
 
 if currentTarget then
-local distToCurrent = (currentTarget.Position - myPos).Magnitude
-if distToCurrent <= CONFIG.STOP_DISTANCE then
+local toTarget = currentTarget.Position - myPos
+local distToCurrent = toTarget.Magnitude
+local frameMove = speed * dt * 1.8
+local effectiveStop = math.max(CONFIG.STOP_DISTANCE, frameMove)
+local passed = false
+if distToCurrent > 0.5 and distToCurrent < 60 then
+local vel = h.Velocity
+if vel.Magnitude > 5 then
+local dot = vel.Unit:Dot(toTarget.Unit)
+if dot < -0.2 then passed = true end
+end
+end
+if distToCurrent <= effectiveStop or passed then
 visitedGifts[currentTarget] = os.clock()
 currentTarget = nil
 setBeamTarget(nil)
@@ -422,7 +524,6 @@ currentTarget = findClosestGift(myPos)
 setBeamTarget(currentTarget)
 end
 
--- si no hay target, forzar un rescan (throttled) antes de rendirse
 if not currentTarget then
 local now = os.clock()
 if now - lastForcedRescan > 0.4 then
@@ -440,7 +541,7 @@ goingToSpawn = true
 spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
-bodyVel.Velocity = Vector3.new(0, -CONFIG.FALL_SPEED, 0)
+bodyVel.Velocity = Vector3.zero
 return
 end
 noTargetSince = nil
@@ -462,7 +563,7 @@ else
 local dir = delta.Unit
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.35, 1)
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.2, 1)
 end
 bodyVel.Velocity = dir * (speed * speedMul)
 end
@@ -3070,7 +3171,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Set Null smoothness (1-2000 | default 600)"},
+{"nullspeed n", "Set Null smoothness (1-2000 | max speed 5000)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3281,7 +3382,7 @@ local cmdHints = {
 {p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
 {p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
 {p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
-{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-2000]  (current: %d | default: 600)", S.nullSmooth) end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-2000]  (current: %d | max speed 5000)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
