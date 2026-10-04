@@ -1,4 +1,4 @@
-local VERSION = "2.3.5"
+local VERSION = "2.3.6"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -92,6 +92,129 @@ local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
+
+-- ================= GIFT TRACKING (EVENT-BASED, ESCANEO ÚNICO) =================
+local GIFT_NAMES_SET = {}
+for _, n in ipairs(CONFIG.GIFT_NAMES) do GIFT_NAMES_SET[n] = true end
+
+local giftCache = {}
+local giftTrackingConns = {}
+local itemPoolsRef = nil
+local workspaceGiftConn = nil
+
+local function isGiftObject(obj)
+if not obj or typeof(obj) ~= "Instance" then return false end
+if not obj:IsA("BasePart") then return false end
+if obj.Transparency >= 0.9 then return false end
+return GIFT_NAMES_SET[obj.Name] == true
+end
+
+local function disconnectGiftTracking()
+for _, c in ipairs(giftTrackingConns) do
+pcall(function() c:Disconnect() end)
+end
+giftTrackingConns = {}
+end
+
+local function initialScanGifts(itemPools)
+giftCache = {}
+if not itemPools then return end
+for _, obj in ipairs(itemPools:GetDescendants()) do
+if isGiftObject(obj) then
+giftCache[obj] = true
+end
+end
+end
+
+local setupGiftTracking
+
+local function setupGiftTracking()
+disconnectGiftTracking()
+local itemPools = workspace:FindFirstChild("Item_Pools", true)
+itemPoolsRef = itemPools
+initialScanGifts(itemPools)
+if not itemPools then return end
+
+table.insert(giftTrackingConns, itemPools.DescendantAdded:Connect(function(obj)
+if isGiftObject(obj) then
+giftCache[obj] = true
+end
+end))
+
+table.insert(giftTrackingConns, itemPools.DescendantRemoving:Connect(function(obj)
+if giftCache[obj] then
+giftCache[obj] = nil
+end
+end))
+
+table.insert(giftTrackingConns, itemPools.AncestryChanged:Connect(function()
+if not itemPools:IsDescendantOf(game) then
+task.delay(1, function()
+if itemPoolsRef == itemPools then
+setupGiftTracking()
+end
+end)
+end
+end))
+end
+
+workspaceGiftConn = workspace.DescendantAdded:Connect(function(obj)
+if obj.Name == "Item_Pools" and obj:IsA("Folder") then
+task.wait(0.2)
+if workspace:FindFirstChild("Item_Pools", true) ~= itemPoolsRef then
+setupGiftTracking()
+end
+end
+end)
+
+setupGiftTracking()
+-- ==============================================================================
+
+local _lastCleanup = 0
+local function cleanupVisited()
+local now = os.clock()
+if now - _lastCleanup < 0.5 then return end
+_lastCleanup = now
+for gift, time in pairs(visitedGifts) do
+if typeof(gift) ~= "Instance" or not gift.Parent then
+visitedGifts[gift] = nil
+elseif now - time > CONFIG.VISIT_COOLDOWN then
+visitedGifts[gift] = nil
+end
+end
+end
+
+local function findClosestGift(fromPos)
+cleanupVisited()
+local closest = nil
+local minDist = CONFIG.MAX_DISTANCE
+
+for gift in pairs(giftCache) do
+if typeof(gift) == "Instance" and gift.Parent and gift.Transparency < 0.9 then
+if not visitedGifts[gift] then
+local dist = (gift.Position - fromPos).Magnitude
+if dist < minDist then
+minDist = dist
+closest = gift
+end
+end
+end
+end
+
+if closest then return closest end
+
+for gift in pairs(giftCache) do
+if typeof(gift) == "Instance" and gift.Parent and gift.Transparency < 0.9 then
+local dist = (gift.Position - fromPos).Magnitude
+if dist < minDist then
+minDist = dist
+closest = gift
+end
+end
+end
+
+return closest
+end
 
 local function saveState(char)
 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -190,60 +313,6 @@ if spawn and spawn:IsA("Model") then
 return spawn:FindFirstChildWhichIsA("BasePart", true)
 end
 return nil
-end
-
-local function getGifts()
-local gifts = {}
-local itemPools = workspace:FindFirstChild("Item_Pools", true)
-if not itemPools then return gifts end
-for _, obj in ipairs(itemPools:GetDescendants()) do
-if obj:IsA("BasePart") and obj.Transparency < 0.9 then
-for _, name in ipairs(CONFIG.GIFT_NAMES) do
-if obj.Name == name then
-table.insert(gifts, obj)
-break
-end
-end
-end
-end
-return gifts
-end
-
-local function cleanupVisited()
-local now = os.clock()
-for gift, time in pairs(visitedGifts) do
-if typeof(gift) ~= "Instance" or not gift.Parent then
-visitedGifts[gift] = nil
-elseif now - time > CONFIG.VISIT_COOLDOWN then
-visitedGifts[gift] = nil
-end
-end
-end
-
-local function findClosestGift(fromPos)
-cleanupVisited()
-local gifts = getGifts()
-if #gifts == 0 then return nil end
-local closest = nil
-local minDist = CONFIG.MAX_DISTANCE
-for _, gift in ipairs(gifts) do
-if visitedGifts[gift] then continue end
-local dist = (gift.Position - fromPos).Magnitude
-if dist < minDist then
-minDist = dist
-closest = gift
-end
-end
-if not closest then
-for _, gift in ipairs(gifts) do
-local dist = (gift.Position - fromPos).Magnitude
-if dist < minDist then
-minDist = dist
-closest = gift
-end
-end
-end
-return closest
 end
 
 local function setBeamTarget(target)
