@@ -1,4 +1,4 @@
-local VERSION = "2.4.3"
+local VERSION = "2.4.4"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -87,7 +87,6 @@ table.insert(_G.__NullEnemyCleanerConns, conn)
 return
 end
 
--- Full scan & clean (borra todos, incluyendo duplicados)
 local ok, desc = pcall(function() return enemies:GetDescendants() end)
 if ok and desc then
 for _, obj in ipairs(desc) do
@@ -131,7 +130,7 @@ local CONFIG = {
 SPEED_DEFAULT = 1500,
 SPEED_MIN = 80,
 SPEED_MAX = 5000,
-STOP_DISTANCE = 3,
+STOP_DISTANCE = 2,
 SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
@@ -141,10 +140,9 @@ END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
 VISIT_COOLDOWN = 4.0,
-SLOW_RADIUS = 60,
-DIST_SPEED_CAP = 12,
-MIN_TARGET_TIME = 0.4,
-SWITCH_THRESHOLD = 0.7,
+SLOW_RADIUS = 5,
+MIN_TARGET_TIME = 0.15,
+SWITCH_THRESHOLD = 0.85,
 }
 
 local function getSpeed()
@@ -169,7 +167,6 @@ local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
-local currentVel = Vector3.new()
 local targetCommitUntil = 0
 
 -- ============ GIFT TRACKING (Item_Pools) ============
@@ -377,7 +374,6 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 visitedGifts = {}
-currentVel = Vector3.new()
 targetCommitUntil = 0
 end
 
@@ -446,7 +442,6 @@ goingToSpawn = false
 spawnPart = nil
 savedState = nil
 visitedGifts = {}
-currentVel = Vector3.new()
 targetCommitUntil = 0
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
@@ -491,8 +486,7 @@ currentTarget = newTarget
 setBeamTarget(currentTarget)
 targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
 else
-currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
-bodyVel.Velocity = currentVel
+bodyVel.Velocity = Vector3.zero
 return
 end
 end
@@ -514,11 +508,11 @@ if currentTarget then
 local toTarget = currentTarget.Position - myPos
 local distToCurrent = toTarget.Magnitude
 local passed = false
-if distToCurrent > 0.5 and distToCurrent < 15 then
+if distToCurrent > 0.3 and distToCurrent < 10 then
 local vel = h.Velocity
-if vel.Magnitude > 30 then
+if vel.Magnitude > 50 then
 local dot = vel.Unit:Dot(toTarget.Unit)
-if dot < -0.7 then passed = true end
+if dot < -0.5 then passed = true end
 end
 end
 if distToCurrent <= CONFIG.STOP_DISTANCE or passed then
@@ -540,7 +534,7 @@ end
 
 if currentTarget and now >= targetCommitUntil then
 local distToCurrent = (currentTarget.Position - myPos).Magnitude
-if distToCurrent > 40 then
+if distToCurrent > 20 then
 local best = findClosestGift(myPos)
 if best and best ~= currentTarget then
 local newDist = (best.Position - myPos).Magnitude
@@ -572,8 +566,7 @@ goingToSpawn = true
 spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
-currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
-bodyVel.Velocity = currentVel
+bodyVel.Velocity = Vector3.zero
 return
 end
 noTargetSince = nil
@@ -589,20 +582,16 @@ fullCleanup()
 return
 end
 
-local desiredVel = Vector3.new()
-if dist > 0.05 then
+if dist < 0.05 then
+bodyVel.Velocity = Vector3.zero
+else
 local dir = delta.Unit
-local distCap = dist * CONFIG.DIST_SPEED_CAP
-local speedMul = 1
+local finalSpeed = speed
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.2, 1)
+finalSpeed = speed * math.clamp(dist / CONFIG.SLOW_RADIUS, 0.15, 1)
 end
-local finalSpeed = math.min(speed * speedMul, distCap)
-desiredVel = dir * finalSpeed
+bodyVel.Velocity = dir * finalSpeed
 end
-
-currentVel = currentVel:Lerp(desiredVel, math.clamp(dt * 12, 0, 1))
-bodyVel.Velocity = currentVel
 
 if bodyGyro then
 local lookDir = Vector3.new(delta.X, 0, delta.Z)
@@ -1581,7 +1570,6 @@ pcall(_G.MouseRecorderCleanup)
 _G.MouseRecorderCleanup = nil
 end
 _G.NullSmoothnessClose = S.nullSmooth
--- ENEMY CLEANER PERMANENTE: se activa la primera vez, nunca se apaga
 activateEnemyCleanerPermanent()
 local fn = loadstring(NULL_CODE)
 if not fn then notifSet("null", "Null FAILED (no loadstring)", false); return end
