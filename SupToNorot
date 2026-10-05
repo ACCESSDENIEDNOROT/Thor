@@ -1,4 +1,4 @@
-local VERSION = "2.4.5"
+local VERSION = "2.4.6"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -128,10 +128,7 @@ end
 
 local CONFIG = {
 SMOOTHNESS_DEFAULT = 600,
-SMOOTHNESS_MIN = 80,
 SMOOTHNESS_MAX = 2000,
-MIN_SPEED = 80,
-MAX_SPEED = 650,
 STOP_DISTANCE = 6,
 SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
@@ -141,11 +138,10 @@ GIFT_NAMES = {"Gift", "GoldenGift"},
 END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
+MIN_SPEED = 80,
+MAX_SPEED = 650,
 VISIT_COOLDOWN = 4.0,
-SLOW_RADIUS = 60,
-DIST_SPEED_CAP = 6,
-MIN_TARGET_TIME = 0.4,
-SWITCH_THRESHOLD = 0.7,
+SLOW_RADIUS = 14,
 }
 
 local function getSpeed()
@@ -172,8 +168,81 @@ local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
-local currentVel = Vector3.new()
-local targetCommitUntil = 0
+
+-- ============ ENEMY CLEANER (workspace.Enemies) ============
+local enemyCleanConns = {}
+local enemiesRef = nil
+
+local function isInsideBell(obj)
+local current = obj
+local depth = 0
+while current and depth < 25 do
+if typeof(current) ~= "Instance" then break end
+if current.Name == "Bell" then return true end
+if current == workspace then break end
+current = current.Parent
+depth = depth + 1
+end
+return false
+end
+
+local function cleanEnemyObject(obj)
+if not obj or typeof(obj) ~= "Instance" then return end
+if isInsideBell(obj) then return end
+if obj:IsA("TouchInterest") or obj:IsA("TouchTransmitter") or obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("RemoteEvent") then
+pcall(function() obj:Destroy() end)
+end
+end
+
+local function disconnectEnemyCleaner()
+for _, c in ipairs(enemyCleanConns) do
+pcall(function() c:Disconnect() end)
+end
+enemyCleanConns = {}
+end
+
+local startEnemyCleaner
+startEnemyCleaner = function()
+disconnectEnemyCleaner()
+local enemies = workspace:FindFirstChild("Enemies")
+enemiesRef = enemies
+if not enemies then
+local conn
+conn = workspace.DescendantAdded:Connect(function(obj)
+if obj.Name == "Enemies" and (obj:IsA("Folder") or obj:IsA("Model")) then
+if conn then conn:Disconnect() end
+task.wait(0.2)
+if isRunning then startEnemyCleaner() end
+end
+end)
+table.insert(enemyCleanConns, conn)
+return
+end
+
+for _, obj in ipairs(enemies:GetDescendants()) do
+cleanEnemyObject(obj)
+end
+
+table.insert(enemyCleanConns, enemies.DescendantAdded:Connect(function(obj)
+cleanEnemyObject(obj)
+end))
+
+table.insert(enemyCleanConns, enemies.AncestryChanged:Connect(function()
+if not enemies:IsDescendantOf(game) then
+task.delay(1, function()
+if isRunning and enemiesRef == enemies then
+startEnemyCleaner()
+end
+end)
+end
+end))
+end
+
+local function stopEnemyCleaner()
+disconnectEnemyCleaner()
+enemiesRef = nil
+end
+-- ===========================================================
 
 -- ============ GIFT TRACKING (Item_Pools) ============
 local GIFT_NAMES_SET = {}
@@ -338,7 +407,7 @@ end
 
 local function fullCleanup()
 isRunning = false
-disconnectGiftTracking()
+stopEnemyCleaner()
 if renderConn then renderConn:Disconnect() renderConn = nil end
 if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
 if inputConn then inputConn:Disconnect() inputConn = nil end
@@ -380,8 +449,6 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 visitedGifts = {}
-currentVel = Vector3.new()
-targetCommitUntil = 0
 end
 
 _G.MouseRecorderCleanup = fullCleanup
@@ -449,8 +516,6 @@ goingToSpawn = false
 spawnPart = nil
 savedState = nil
 visitedGifts = {}
-currentVel = Vector3.new()
-targetCommitUntil = 0
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
 beam = Instance.new("Beam")
@@ -464,6 +529,7 @@ beam.LightInfluence = 0
 beam.Enabled = false
 beam.Parent = hrp
 applyFlyState(char)
+startEnemyCleaner()
 
 renderConn = RunService.Heartbeat:Connect(function(dt)
 if not isRunning then return end
@@ -475,38 +541,19 @@ if not bodyVel or not bodyVel.Parent then return end
 dt = math.min(dt, 1/30)
 local speed = getSpeed()
 local myPos = h.Position
-local now = os.clock()
 local targetPos, isSpawn
 
 if goingToSpawn then
 if not spawnPart or not spawnPart.Parent then
 spawnPart = findSpawnPart()
 if not spawnPart then
-if now - lastForcedRescan > 0.4 then
-lastForcedRescan = now
-forceRescan()
-end
-local newTarget = findClosestGift(myPos)
-if newTarget then
-goingToSpawn = false
-noTargetSince = nil
-currentTarget = newTarget
-setBeamTarget(currentTarget)
-targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
-else
-currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
-bodyVel.Velocity = currentVel
+bodyVel.Velocity = Vector3.zero
 return
 end
 end
-end
-if goingToSpawn and spawnPart then
 targetPos = spawnPart.Position + CONFIG.SPAWN_OFFSET
 isSpawn = true
-end
-end
-
-if not isSpawn then
+else
 if currentTarget and (not currentTarget.Parent or currentTarget.Transparency >= 0.9) then
 visitedGifts[currentTarget] = os.clock()
 currentTarget = nil
@@ -514,17 +561,8 @@ setBeamTarget(nil)
 end
 
 if currentTarget then
-local toTarget = currentTarget.Position - myPos
-local distToCurrent = toTarget.Magnitude
-local passed = false
-if distToCurrent > 0.3 and distToCurrent < 10 then
-local vel = h.Velocity
-if vel.Magnitude > 30 then
-local dot = vel.Unit:Dot(toTarget.Unit)
-if dot < -0.5 then passed = true end
-end
-end
-if distToCurrent <= CONFIG.STOP_DISTANCE or passed then
+local distToCurrent = (currentTarget.Position - myPos).Magnitude
+if distToCurrent <= CONFIG.STOP_DISTANCE then
 visitedGifts[currentTarget] = os.clock()
 currentTarget = nil
 setBeamTarget(nil)
@@ -532,40 +570,8 @@ end
 end
 
 if not currentTarget then
-if now >= targetCommitUntil then
 currentTarget = findClosestGift(myPos)
-if currentTarget then
 setBeamTarget(currentTarget)
-targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
-end
-end
-end
-
-if currentTarget and now >= targetCommitUntil then
-local distToCurrent = (currentTarget.Position - myPos).Magnitude
-if distToCurrent > 40 then
-local best = findClosestGift(myPos)
-if best and best ~= currentTarget then
-local newDist = (best.Position - myPos).Magnitude
-if newDist < distToCurrent * CONFIG.SWITCH_THRESHOLD then
-currentTarget = best
-setBeamTarget(currentTarget)
-targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
-end
-end
-end
-end
-
-if not currentTarget then
-if now - lastForcedRescan > 0.4 then
-lastForcedRescan = now
-forceRescan()
-currentTarget = findClosestGift(myPos)
-if currentTarget then
-setBeamTarget(currentTarget)
-targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
-end
-end
 end
 
 if not currentTarget then
@@ -575,8 +581,7 @@ goingToSpawn = true
 spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
-currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
-bodyVel.Velocity = currentVel
+bodyVel.Velocity = Vector3.zero
 return
 end
 noTargetSince = nil
@@ -592,20 +597,16 @@ fullCleanup()
 return
 end
 
-local desiredVel = Vector3.new()
-if dist > 0.05 then
+if dist < 0.05 then
+bodyVel.Velocity = Vector3.zero
+else
 local dir = delta.Unit
-local distCap = dist * CONFIG.DIST_SPEED_CAP
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.2, 1)
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.35, 1)
 end
-local finalSpeed = math.min(speed * speedMul, distCap)
-desiredVel = dir * finalSpeed
+bodyVel.Velocity = dir * (speed * speedMul)
 end
-
-currentVel = currentVel:Lerp(desiredVel, math.clamp(dt * 12, 0, 1))
-bodyVel.Velocity = currentVel
 
 if bodyGyro then
 local lookDir = Vector3.new(delta.X, 0, delta.Z)
@@ -3215,7 +3216,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Null smoothness 1-2000 (default 600 | max 650 studs/s)"},
+{"nullspeed n", "Set Null smoothness (1-2000 | default 600 | max 650 studs/s)"},
 }
 
 local ABUSE_COMMANDS = {
