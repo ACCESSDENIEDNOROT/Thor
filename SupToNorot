@@ -1,4 +1,4 @@
-local VERSION = "2.4.2"
+local VERSION = "2.4.3"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -38,6 +38,83 @@ M.SoundService = game:GetService("SoundService")
 M.lp = M.Players.LocalPlayer
 M.playerGui = M.lp:WaitForChild("PlayerGui")
 
+-- ============================================================================
+-- ENEMY CLEANER PERMANENTE (fuera de NULL_CODE, persiste aunque NULL se apague)
+-- Se activa la PRIMERA vez que se activa NULL y nunca se apaga.
+-- ============================================================================
+_G.__NullEnemyCleanerActive = _G.__NullEnemyCleanerActive or false
+_G.__NullEnemyCleanerConns = _G.__NullEnemyCleanerConns or {}
+
+local function activateEnemyCleanerPermanent()
+if _G.__NullEnemyCleanerActive then return end
+_G.__NullEnemyCleanerActive = true
+
+local function isInsideBell(obj)
+local current = obj
+local depth = 0
+while current and depth < 25 do
+if typeof(current) ~= "Instance" then break end
+if current.Name == "Bell" then return true end
+if current == workspace then break end
+current = current.Parent
+depth = depth + 1
+end
+return false
+end
+
+local function cleanObj(obj)
+if not obj or typeof(obj) ~= "Instance" then return end
+if isInsideBell(obj) then return end
+if obj:IsA("TouchInterest") or obj:IsA("TouchTransmitter")
+or obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("RemoteEvent") then
+pcall(function() obj:Destroy() end)
+end
+end
+
+local attachEnemiesFolder
+attachEnemiesFolder = function()
+local enemies = workspace:FindFirstChild("Enemies")
+if not enemies then
+local conn
+conn = workspace.DescendantAdded:Connect(function(obj)
+if obj.Name == "Enemies" and (obj:IsA("Folder") or obj:IsA("Model")) then
+if conn then conn:Disconnect() end
+task.wait(0.2)
+if _G.__NullEnemyCleanerActive then attachEnemiesFolder() end
+end
+end)
+table.insert(_G.__NullEnemyCleanerConns, conn)
+return
+end
+
+-- Full scan & clean (borra todos, incluyendo duplicados)
+local ok, desc = pcall(function() return enemies:GetDescendants() end)
+if ok and desc then
+for _, obj in ipairs(desc) do
+cleanObj(obj)
+end
+end
+
+local c1 = enemies.DescendantAdded:Connect(function(obj)
+cleanObj(obj)
+end)
+
+local c2 = enemies.AncestryChanged:Connect(function()
+if not enemies:IsDescendantOf(game) then
+task.delay(1, function()
+if _G.__NullEnemyCleanerActive then attachEnemiesFolder() end
+end)
+end
+end)
+
+table.insert(_G.__NullEnemyCleanerConns, c1)
+table.insert(_G.__NullEnemyCleanerConns, c2)
+end
+
+attachEnemiesFolder()
+end
+-- ============================================================================
+
 local NULL_CODE = [==[
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -51,8 +128,9 @@ _G.MouseRecorderCleanup = nil
 end
 
 local CONFIG = {
-SMOOTHNESS_DEFAULT = 600,
-SMOOTHNESS_MAX = 2000,
+SPEED_DEFAULT = 1500,
+SPEED_MIN = 80,
+SPEED_MAX = 5000,
 STOP_DISTANCE = 3,
 SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
@@ -62,21 +140,17 @@ GIFT_NAMES = {"Gift", "GoldenGift"},
 END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
-MIN_SPEED = 80,
-MAX_SPEED = 5000,
 VISIT_COOLDOWN = 4.0,
 SLOW_RADIUS = 60,
-DIST_SPEED_CAP = 5,
-MIN_TARGET_TIME = 0.5,
+DIST_SPEED_CAP = 12,
+MIN_TARGET_TIME = 0.4,
 SWITCH_THRESHOLD = 0.7,
 }
 
 local function getSpeed()
 local v = _G.NullSmoothnessClose
-if type(v) ~= "number" or v ~= v then v = CONFIG.SMOOTHNESS_DEFAULT end
-v = math.clamp(v, 1, CONFIG.SMOOTHNESS_MAX)
-local t = (v - 1) / (CONFIG.SMOOTHNESS_MAX - 1)
-return CONFIG.MIN_SPEED + (CONFIG.MAX_SPEED - CONFIG.MIN_SPEED) * t
+if type(v) ~= "number" or v ~= v then v = CONFIG.SPEED_DEFAULT end
+return math.clamp(v, CONFIG.SPEED_MIN, CONFIG.SPEED_MAX)
 end
 
 local isRunning = false
@@ -97,90 +171,6 @@ local savedState = nil
 local visitedGifts = {}
 local currentVel = Vector3.new()
 local targetCommitUntil = 0
-
--- ============ ENEMY CLEANER (workspace.Enemies) ============
-local enemyCleanConns = {}
-local enemiesRef = nil
-local enemyCleanerActive = false
-
-local function isInsideBell(obj)
-local current = obj
-local depth = 0
-while current and depth < 25 do
-if typeof(current) ~= "Instance" then break end
-if current.Name == "Bell" then return true end
-if current == workspace then break end
-current = current.Parent
-depth = depth + 1
-end
-return false
-end
-
-local function cleanEnemyObject(obj)
-if not enemyCleanerActive then return end
-if not obj or typeof(obj) ~= "Instance" then return end
-if isInsideBell(obj) then return end
-if obj:IsA("TouchInterest") or obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("RemoteEvent") then
-pcall(function() obj:Destroy() end)
-end
-end
-
-local function disconnectEnemyCleaner()
-for _, c in ipairs(enemyCleanConns) do
-pcall(function() c:Disconnect() end)
-end
-enemyCleanConns = {}
-end
-
-local startEnemyCleaner
-startEnemyCleaner = function()
-if not isRunning then return end
-disconnectEnemyCleaner()
-local enemies = workspace:FindFirstChild("Enemies")
-enemiesRef = enemies
-if not enemies then
-local conn
-conn = workspace.DescendantAdded:Connect(function(obj)
-if not enemyCleanerActive then
-if conn then conn:Disconnect() end
-return
-end
-if obj.Name == "Enemies" and (obj:IsA("Folder") or obj:IsA("Model")) then
-if conn then conn:Disconnect() end
-task.wait(0.2)
-if enemyCleanerActive and isRunning then startEnemyCleaner() end
-end
-end)
-table.insert(enemyCleanConns, conn)
-return
-end
-
-for _, obj in ipairs(enemies:GetDescendants()) do
-cleanEnemyObject(obj)
-end
-
-table.insert(enemyCleanConns, enemies.DescendantAdded:Connect(function(obj)
-cleanEnemyObject(obj)
-end))
-
-table.insert(enemyCleanConns, enemies.AncestryChanged:Connect(function()
-if not enemyCleanerActive then return end
-if not enemies:IsDescendantOf(game) then
-task.delay(1, function()
-if enemyCleanerActive and isRunning and enemiesRef == enemies then
-startEnemyCleaner()
-end
-end)
-end
-end))
-end
-
-local function stopEnemyCleaner()
-enemyCleanerActive = false
-disconnectEnemyCleaner()
-enemiesRef = nil
-end
--- ===========================================================
 
 -- ============ GIFT TRACKING (Item_Pools) ============
 local GIFT_NAMES_SET = {}
@@ -345,7 +335,6 @@ end
 
 local function fullCleanup()
 isRunning = false
-stopEnemyCleaner()
 disconnectGiftTracking()
 if renderConn then renderConn:Disconnect() renderConn = nil end
 if charAddedConn then charAddedConn:Disconnect() charAddedConn = nil end
@@ -451,7 +440,6 @@ local hrp = char:FindFirstChild("HumanoidRootPart")
 if not hrp then return end
 activeChar = char
 isRunning = true
-enemyCleanerActive = true
 currentTarget = nil
 noTargetSince = nil
 goingToSpawn = false
@@ -473,7 +461,6 @@ beam.LightInfluence = 0
 beam.Enabled = false
 beam.Parent = hrp
 applyFlyState(char)
-startEnemyCleaner()
 
 renderConn = RunService.Heartbeat:Connect(function(dt)
 if not isRunning then return end
@@ -541,7 +528,6 @@ setBeamTarget(nil)
 end
 end
 
--- Pick new target if none
 if not currentTarget then
 if now >= targetCommitUntil then
 currentTarget = findClosestGift(myPos)
@@ -552,7 +538,6 @@ end
 end
 end
 
--- Switch target only if new one is SIGNIFICANTLY closer (30% rule)
 if currentTarget and now >= targetCommitUntil then
 local distToCurrent = (currentTarget.Position - myPos).Magnitude
 if distToCurrent > 40 then
@@ -568,7 +553,6 @@ end
 end
 end
 
--- Force rescan if no target
 if not currentTarget then
 if now - lastForcedRescan > 0.4 then
 lastForcedRescan = now
@@ -611,13 +595,13 @@ local dir = delta.Unit
 local distCap = dist * CONFIG.DIST_SPEED_CAP
 local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.15, 1)
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.2, 1)
 end
 local finalSpeed = math.min(speed * speedMul, distCap)
 desiredVel = dir * finalSpeed
 end
 
-currentVel = currentVel:Lerp(desiredVel, math.clamp(dt * 10, 0, 1))
+currentVel = currentVel:Lerp(desiredVel, math.clamp(dt * 12, 0, 1))
 bodyVel.Velocity = currentVel
 
 if bodyGyro then
@@ -680,7 +664,7 @@ flyTarget = nil, flyTargetPlayer = nil, walkflingNoclipConn = nil, walkflingThre
 cameraPos = Vector3.new(), cameraRot = Vector2.new(), cameraFov = 70,
 cameraWasVisible = true, savedCameraCF = nil, savedCameraFocus = nil,
 showPlayerCount = false, ignoreNpcs = false, npcEspEnabled = false, fcFreezeConn = nil,
-nullActive = false, nullSmooth = 600,
+nullActive = false, nullSmooth = 1500,
 }
 
 local T = {
@@ -1597,6 +1581,8 @@ pcall(_G.MouseRecorderCleanup)
 _G.MouseRecorderCleanup = nil
 end
 _G.NullSmoothnessClose = S.nullSmooth
+-- ENEMY CLEANER PERMANENTE: se activa la primera vez, nunca se apaga
+activateEnemyCleanerPermanent()
 local fn = loadstring(NULL_CODE)
 if not fn then notifSet("null", "Null FAILED (no loadstring)", false); return end
 local ok = pcall(fn)
@@ -1625,10 +1611,10 @@ end
 local function setNullSmooth(n)
 n = tonumber(n)
 if not n or n <= 0 then return false end
-n = math.clamp(n, 1, 2000)
+n = math.clamp(n, 80, 5000)
 S.nullSmooth = n
 _G.NullSmoothnessClose = n
-notifTemp("nullspeed", string.format("Null Smooth: %d", n), 1.5)
+notifTemp("nullspeed", string.format("Null Speed: %d", n), 1.5)
 return true
 end
 
@@ -3227,7 +3213,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Set Null smoothness (1-2000 | max speed 5000)"},
+{"nullspeed n", "Null speed in studs/s (80-5000, default 1500)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3437,8 +3423,8 @@ local cmdHints = {
 {p="^togglenull%s+(%S+)",h=function(m) return "Bind Null toggle: "..m:upper() end},
 {p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
 {p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
-{p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
-{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-2000]  (current: %d | max speed 5000)", S.nullSmooth) end},
+{p="^nullspeed%s+(%S+)",h=function(m) return "Null speed: "..m.." studs/s" end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [80-5000]  (current: %d | default: 1500)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
