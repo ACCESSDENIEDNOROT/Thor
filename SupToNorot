@@ -1,4 +1,4 @@
-local VERSION = "2.4.4"
+local VERSION = "2.4.5"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
 
@@ -127,10 +127,12 @@ _G.MouseRecorderCleanup = nil
 end
 
 local CONFIG = {
-SPEED_DEFAULT = 1500,
-SPEED_MIN = 80,
-SPEED_MAX = 5000,
-STOP_DISTANCE = 2,
+SMOOTHNESS_DEFAULT = 600,
+SMOOTHNESS_MIN = 80,
+SMOOTHNESS_MAX = 2000,
+MIN_SPEED = 80,
+MAX_SPEED = 650,
+STOP_DISTANCE = 6,
 SPAWN_STOP_DISTANCE = 6,
 MAX_DISTANCE = 9000,
 BEAM_COLOR = Color3.fromRGB(0, 255, 200),
@@ -140,15 +142,18 @@ END_DELAY = 0.6,
 GIFT_OFFSET = Vector3.new(0, 0, 0),
 SPAWN_OFFSET = Vector3.new(0, 5, 0),
 VISIT_COOLDOWN = 4.0,
-SLOW_RADIUS = 5,
-MIN_TARGET_TIME = 0.15,
-SWITCH_THRESHOLD = 0.85,
+SLOW_RADIUS = 60,
+DIST_SPEED_CAP = 6,
+MIN_TARGET_TIME = 0.4,
+SWITCH_THRESHOLD = 0.7,
 }
 
 local function getSpeed()
 local v = _G.NullSmoothnessClose
-if type(v) ~= "number" or v ~= v then v = CONFIG.SPEED_DEFAULT end
-return math.clamp(v, CONFIG.SPEED_MIN, CONFIG.SPEED_MAX)
+if type(v) ~= "number" or v ~= v then v = CONFIG.SMOOTHNESS_DEFAULT end
+v = math.clamp(v, 1, CONFIG.SMOOTHNESS_MAX)
+local t = (v - 1) / (CONFIG.SMOOTHNESS_MAX - 1)
+return CONFIG.MIN_SPEED + (CONFIG.MAX_SPEED - CONFIG.MIN_SPEED) * t
 end
 
 local isRunning = false
@@ -167,6 +172,7 @@ local goingToSpawn = false
 local spawnPart = nil
 local savedState = nil
 local visitedGifts = {}
+local currentVel = Vector3.new()
 local targetCommitUntil = 0
 
 -- ============ GIFT TRACKING (Item_Pools) ============
@@ -374,6 +380,7 @@ noTargetSince = nil
 goingToSpawn = false
 spawnPart = nil
 visitedGifts = {}
+currentVel = Vector3.new()
 targetCommitUntil = 0
 end
 
@@ -442,6 +449,7 @@ goingToSpawn = false
 spawnPart = nil
 savedState = nil
 visitedGifts = {}
+currentVel = Vector3.new()
 targetCommitUntil = 0
 att0 = Instance.new("Attachment")
 att0.Parent = hrp
@@ -486,7 +494,8 @@ currentTarget = newTarget
 setBeamTarget(currentTarget)
 targetCommitUntil = now + CONFIG.MIN_TARGET_TIME
 else
-bodyVel.Velocity = Vector3.zero
+currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
+bodyVel.Velocity = currentVel
 return
 end
 end
@@ -510,7 +519,7 @@ local distToCurrent = toTarget.Magnitude
 local passed = false
 if distToCurrent > 0.3 and distToCurrent < 10 then
 local vel = h.Velocity
-if vel.Magnitude > 50 then
+if vel.Magnitude > 30 then
 local dot = vel.Unit:Dot(toTarget.Unit)
 if dot < -0.5 then passed = true end
 end
@@ -534,7 +543,7 @@ end
 
 if currentTarget and now >= targetCommitUntil then
 local distToCurrent = (currentTarget.Position - myPos).Magnitude
-if distToCurrent > 20 then
+if distToCurrent > 40 then
 local best = findClosestGift(myPos)
 if best and best ~= currentTarget then
 local newDist = (best.Position - myPos).Magnitude
@@ -566,7 +575,8 @@ goingToSpawn = true
 spawnPart = findSpawnPart()
 setBeamTarget(nil)
 end
-bodyVel.Velocity = Vector3.zero
+currentVel = currentVel:Lerp(Vector3.new(), math.clamp(dt * 6, 0, 1))
+bodyVel.Velocity = currentVel
 return
 end
 noTargetSince = nil
@@ -582,16 +592,20 @@ fullCleanup()
 return
 end
 
-if dist < 0.05 then
-bodyVel.Velocity = Vector3.zero
-else
+local desiredVel = Vector3.new()
+if dist > 0.05 then
 local dir = delta.Unit
-local finalSpeed = speed
+local distCap = dist * CONFIG.DIST_SPEED_CAP
+local speedMul = 1
 if dist < CONFIG.SLOW_RADIUS then
-finalSpeed = speed * math.clamp(dist / CONFIG.SLOW_RADIUS, 0.15, 1)
+speedMul = math.clamp(dist / CONFIG.SLOW_RADIUS, 0.2, 1)
 end
-bodyVel.Velocity = dir * finalSpeed
+local finalSpeed = math.min(speed * speedMul, distCap)
+desiredVel = dir * finalSpeed
 end
+
+currentVel = currentVel:Lerp(desiredVel, math.clamp(dt * 12, 0, 1))
+bodyVel.Velocity = currentVel
 
 if bodyGyro then
 local lookDir = Vector3.new(delta.X, 0, delta.Z)
@@ -653,7 +667,7 @@ flyTarget = nil, flyTargetPlayer = nil, walkflingNoclipConn = nil, walkflingThre
 cameraPos = Vector3.new(), cameraRot = Vector2.new(), cameraFov = 70,
 cameraWasVisible = true, savedCameraCF = nil, savedCameraFocus = nil,
 showPlayerCount = false, ignoreNpcs = false, npcEspEnabled = false, fcFreezeConn = nil,
-nullActive = false, nullSmooth = 1500,
+nullActive = false, nullSmooth = 600,
 }
 
 local T = {
@@ -1599,10 +1613,10 @@ end
 local function setNullSmooth(n)
 n = tonumber(n)
 if not n or n <= 0 then return false end
-n = math.clamp(n, 80, 5000)
+n = math.clamp(n, 1, 2000)
 S.nullSmooth = n
 _G.NullSmoothnessClose = n
-notifTemp("nullspeed", string.format("Null Speed: %d", n), 1.5)
+notifTemp("nullspeed", string.format("Null Smooth: %d", n), 1.5)
 return true
 end
 
@@ -3201,7 +3215,7 @@ local COMMAND_INFO = {
 {"null / unnull / nonull", "Toggle Null (auto gift farm)"},
 {"togglenull [key]", "Bind Null toggle key"},
 {"untogglenull", "Unbind Null toggle key"},
-{"nullspeed n", "Null speed in studs/s (80-5000, default 1500)"},
+{"nullspeed n", "Null smoothness 1-2000 (default 600 | max 650 studs/s)"},
 }
 
 local ABUSE_COMMANDS = {
@@ -3411,8 +3425,8 @@ local cmdHints = {
 {p="^togglenull%s+(%S+)",h=function(m) return "Bind Null toggle: "..m:upper() end},
 {p="^togglenull%s*$",h=function() return "togglenull [key]  (bind key)" end},
 {p="^untogglenull%s*$",h=function() return "Unbind Null toggle" end},
-{p="^nullspeed%s+(%S+)",h=function(m) return "Null speed: "..m.." studs/s" end},
-{p="^nullspeed%s*$",h=function() return string.format("nullspeed [80-5000]  (current: %d | default: 1500)", S.nullSmooth) end},
+{p="^nullspeed%s+(%S+)",h=function(m) return "Null smooth: "..m end},
+{p="^nullspeed%s*$",h=function() return string.format("nullspeed [1-2000]  (current: %d | default: 600)", S.nullSmooth) end},
 {p="^predict%s+(%S+)",h=function(m) return "Base predict: "..m.."s" end},
 {p="^predict%s*$",h=function() return string.format("predict [0.05-2.0]  (base: %.2fs)", PredictS.baseTime) end},
 {p="^predictmulti%s+(%S+)",h=function(m) return "Predict multiplier: "..m end},
