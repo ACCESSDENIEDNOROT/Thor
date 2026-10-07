@@ -1008,8 +1008,9 @@ ABUSE_BG = Color3.fromRGB(35, 12, 12),
 ABUSE_PANEL = Color3.fromRGB(45, 15, 15),
 }
 
+-- ===== CAMBIOS: espAlpha default 0.7, notifVisible y playerCountHiddenByESP =====
 local S = {
-prefix = ";", defaultPrefix = ";", ESPenabled = false, espAlpha = 0,
+prefix = ";", defaultPrefix = ";", ESPenabled = false, espAlpha = 0.7,
 LOCAL_ESP_HIDE_DIST = 15, abuseMode = false, fcRunning = false, fbEnabled = false,
 antilagActive = false, walkflingActive = false, viewing = nil, prefixWaiting = false,
 mouseOverGui = false, dragging = false, dragStart = nil, startPos = nil, hideTimer = nil,
@@ -1019,6 +1020,7 @@ cameraPos = Vector3.new(), cameraRot = Vector2.new(), cameraFov = 70,
 cameraWasVisible = true, savedCameraCF = nil, savedCameraFocus = nil,
 showPlayerCount = false, ignoreNpcs = false, npcEspEnabled = false, fcFreezeConn = nil,
 nullActive = false, nullSmooth = 600,
+notifVisible = false, playerCountHiddenByESP = false,
 }
 
 local T = {
@@ -1094,6 +1096,9 @@ G.notifBox.AnchorPoint = Vector2.new(0, 1)
 G.notifBox.Position = UDim2.new(0, 14, 1, -14)
 G.notifBox.Size = UDim2.new(0, 560, 0, 320)
 G.notifBox.ZIndex = 10000
+-- ===== CAMBIOS: notificaciones desactivadas por defecto + no clickeables =====
+G.notifBox.Visible = false
+G.notifBox.Active = false
 G.notifBox.Parent = G.notifGui
 local notifLayout = Instance.new("UIListLayout")
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1152,6 +1157,7 @@ label.TextXAlignment = Enum.TextXAlignment.Left
 label.Size = UDim2.new(1, 0, 0, 20)
 label.TextTransparency = 1
 label.ZIndex = 10000
+label.Active = false
 label.LayoutOrder = -notifOrder
 label.Parent = G.notifBox
 M.TweenService:Create(label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
@@ -1179,6 +1185,12 @@ end
 local function notifTemp(key, text, duration)
 notifSet(key, text, true)
 task.delay(duration, function() notifSet(key, text .. " OFF", false) end)
+end
+
+-- ===== CAMBIO: función para mostrar/ocultar notificaciones =====
+local function setNotifVisible(on)
+S.notifVisible = on
+G.notifBox.Visible = on
 end
 
 local function isFriend(plr)
@@ -1402,8 +1414,14 @@ clearESP(plr)
 if S.ESPenabled then makeESP(plr) end
 end
 
+-- ===== CAMBIO: sincronización playercount con ESP al activar =====
 local function enableESPAll()
 S.ESPenabled = true
+-- Restaurar playercount si estaba oculto por ESP
+if S.playerCountHiddenByESP then
+    S.playerCountHiddenByESP = false
+    if S.showPlayerCount then G.playerCountGui.Enabled = true end
+end
 for _, plr in pairs(M.Players:GetPlayers()) do makeESP(plr) end
 for _, plr in pairs(M.Players:GetPlayers()) do
 if not playerAddedConns[plr.Name] then
@@ -1418,8 +1436,14 @@ end
 end
 end
 
+-- ===== CAMBIO: sincronización playercount con ESP al desactivar =====
 local function disableESPAll()
 S.ESPenabled = false
+-- Ocultar playercount solo si el usuario lo tenía activado
+if S.showPlayerCount and not S.playerCountHiddenByESP then
+    S.playerCountHiddenByESP = true
+    G.playerCountGui.Enabled = false
+end
 for _, plr in pairs(M.Players:GetPlayers()) do
 if not soloESPPlayers[plr.Name] then clearESP(plr) end
 end
@@ -2681,8 +2705,12 @@ local hpFill = Instance.new("Frame"); hpFill.BackgroundColor3 = Color3.fromRGB(8
 npcEspBoxes[npc] = {sg=sg, box=box, hpBarBg=hpBarBg, hpFill=hpFill, distText=distText, nameText=nameText, hpText=hpText, npc=npc}
 end
 
+-- ===== CAMBIO: NPC ESP solo se muestra si ESP general tambien esta activo =====
 local function updateAllNpcEsp()
-if not S.npcEspEnabled then clearNpcEsp() return end
+if not S.npcEspEnabled or not S.ESPenabled then
+    if next(npcEspBoxes) ~= nil then clearNpcEsp() end
+    return
+end
 local allNpcs = getCachedNpcs()
 local cam = workspace.CurrentCamera
 if not cam then return end
@@ -3499,7 +3527,8 @@ G.espTransBox.Size = UDim2.new(0.45,-4,0,18)
 G.espTransBox.Font = Enum.Font.SourceSans
 G.espTransBox.TextSize = 12
 G.espTransBox.TextColor3 = C.TEXT
-G.espTransBox.Text = "0"
+-- ===== CAMBIO: valor por defecto refleja espAlpha (0.7) =====
+G.espTransBox.Text = string.format("%.2f", S.espAlpha)
 G.espTransBox.PlaceholderText = "0.01-0.95"
 G.espTransBox.PlaceholderColor3 = C.SUBTEXT
 G.espTransBox.Parent = G.page2Frame
@@ -3556,6 +3585,8 @@ local COMMAND_INFO = {
 {"antilag / boostfps", "Reduce graphics"},
 {"abuse / unabuse", "Abuse mode"},
 {"playercount / pcount / toggleplayercount", "Toggle join alerts"},
+{"noti / notifier", "Enable notifications"},
+{"nonoti / unnotifi / nonotifier / unnotifier", "Disable notifications"},
 {"reset", "Kill your character"},
 {"speed / ws n", "Set walkspeed (persists)"},
 {"unspeed / nospeed / unws / nows", "Disable walkspeed"},
@@ -3598,7 +3629,8 @@ local ABUSE_COMMANDS = {
 {"aurapart [part]", "Set aura aim part"},
 {"toggleaura [key]", "Bind aura toggle key"},
 {"untoggleaura", "Unbind aura toggle key"},
-{"ignorenpcs / npcs", "Hide/Show NPC ESP"},
+{"npcs / npcson", "Enable NPC ESP (uses main ESP)"},
+{"nonpcs / unnpcs / npcsoff", "Disable NPC ESP"},
 {"rspy / remotespy", "Load remote spy"},
 {"simplespy", "Load SimpleSpy V3"},
 {"jerk", "Load jerk tool"},
@@ -3771,6 +3803,13 @@ local cmdHints = {
 {p="^playercount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
 {p="^pcount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
 {p="^toggleplayercount%s*$",h=function() return S.showPlayerCount and "Disable player count" or "Enable player count" end},
+-- ===== CAMBIO: hints para noti =====
+{p="^noti%s*$",h=function() return S.notifVisible and "Notifications already ON" or "Enable notifications" end},
+{p="^notifier%s*$",h=function() return S.notifVisible and "Notifications already ON" or "Enable notifications" end},
+{p="^nonoti%s*$",h=function() return "Disable notifications" end},
+{p="^unnotifi%s*$",h=function() return "Disable notifications" end},
+{p="^nonotifier%s*$",h=function() return "Disable notifications" end},
+{p="^unnotifier%s*$",h=function() return "Disable notifications" end},
 {p="^null%s*$",h=function() return S.nullActive and "Null already ON" or "Start Null (gift farm)" end},
 {p="^unnull%s*$",h=function() return "Stop Null" end},
 {p="^nonull%s*$",h=function() return "Stop Null" end},
@@ -4008,11 +4047,26 @@ if SafeFlyS.active then stopSafeFly() else local ok = startSafeFly(); if not ok 
 elseif cmd == "unsafefly" or cmd == "nosafefly" then if not S.abuseMode then return end; if SafeFlyS.active then stopSafeFly() end
 elseif cmd == "safeflyspeed" or cmd == "safefs" then if not S.abuseMode then return end; local v = tonumber(arg1); if v and v > 0 then setSafeFlySpeed(v) end
 elseif cmd == "playercount" or cmd == "pcount" or cmd == "toggleplayercount" then
+-- ===== CAMBIO: al desactivar manualmente, se limpia playerCountHiddenByESP =====
 S.showPlayerCount = not S.showPlayerCount
-G.playerCountGui.Enabled = S.showPlayerCount
+if not S.showPlayerCount then
+    S.playerCountHiddenByESP = false
+    G.playerCountGui.Enabled = false
+else
+    -- Al activar manualmente, respetar si ESP esta apagado (mostrarlo igual)
+    S.playerCountHiddenByESP = false
+    G.playerCountGui.Enabled = true
+end
 updatePlayerCountColor()
 showNotify(S.showPlayerCount and "Player Count: ON" or "Player Count: OFF", S.showPlayerCount and C.SUCCESS or C.SUBTEXT)
-elseif cmd == "ignorenpcs" or cmd == "nonpcs" or cmd == "npcsoff" then S.npcEspEnabled = false; clearNpcEsp(); showNotify("NPC ESP: OFF", C.SUBTEXT)
+-- ===== CAMBIO: comandos noti =====
+elseif cmd == "noti" or cmd == "notifier" then
+setNotifVisible(true)
+showNotify("Notifications: ON", C.SUCCESS)
+elseif cmd == "nonoti" or cmd == "unnotifi" or cmd == "nonotifier" or cmd == "unnotifier" or cmd == "unnotify" then
+setNotifVisible(false)
+showNotify("Notifications: OFF", C.SUBTEXT)
+elseif cmd == "ignorenpcs" or cmd == "nonpcs" or cmd == "npcsoff" or cmd == "unnpcs" then S.npcEspEnabled = false; clearNpcEsp(); showNotify("NPC ESP: OFF", C.SUBTEXT)
 elseif cmd == "unignorenpcs" or cmd == "npcs" or cmd == "npcson" then S.npcEspEnabled = true; showNotify("NPC ESP: ON", C.SUCCESS)
 end
 end
